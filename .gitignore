@@ -1,0 +1,23 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+
+# Runtime data — PRIVATE telemetry (window titles, command history, redacted
+# clipboard, progress logs). NEVER commit these.
+workspace-sessions.json
+desktop-briefs.json
+autopilot-learning.json
+fleet-progress.json
+
+# Android build artifacts (the android/ native project itself is committed)
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+*.apk

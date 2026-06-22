@@ -1,0 +1,8 @@
+{
+  "name": "Veridian Workspace Memory",
+  "description": "A developer context awareness system and AI memory layer tracking virtual desktops, git repositories, VS Code workspaces, terminals, and clipboard states with a high-fidelity APK Mobile Companion and BYOK ElevenLabs v3 voice synthesis.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_DEEPSEEK_API"
+  ]
+}
