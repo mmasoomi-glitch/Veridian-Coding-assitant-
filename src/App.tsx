@@ -46,6 +46,8 @@ import PdrGenerator from "./components/PdrGenerator";
 import PromptInventory from "./components/PromptInventory";
 import BackupRestore from "./components/BackupRestore";
 import CommandPalette from "./components/CommandPalette";
+import MachineSelector from "./components/MachineSelector";
+import TypingBuffer from "./components/TypingBuffer";
 
 // Base URL for the backend API. Empty string => same-origin relative calls
 // (web/dev). For the packaged APK, set VITE_API_BASE at build time to the
@@ -119,6 +121,16 @@ export default function App() {
   // Layout UI states
   const [isNarrating, setIsNarrating] = useState<boolean>(false);
   const [showOverlayWidget, setShowOverlayWidget] = useState<boolean>(true);
+  const [hudStats, setHudStats] = useState<{ ramPct: number; ramUsedGB: number; ramTotalGB: number; cpus: number; loadavg: number; uptimeHrs: number; hostname: string } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const tick = async () => {
+      try { const r = await fetch(`${API_BASE}/api/stats`); if (r.ok && alive) setHudStats(await r.json()); } catch { /* ignore */ }
+    };
+    tick();
+    const id = setInterval(tick, 5000);
+    return () => { alive = false; clearInterval(id); };
+  }, []);
   const [notifications, setNotifications] = useState<Array<{ id: string; title: string; text: string; type: 'warning' | 'info' | 'clipboard' }>>([]);
 
   // Command input simulation state
@@ -748,9 +760,13 @@ export default function App() {
           <PdrGenerator apiBase={API_BASE} />
           <PromptInventory apiBase={API_BASE} />
 
-          {/* Copybook (notes/files) + Clipboard history + Backup/Restore */}
+          {/* Central command: all synced machines */}
+          <MachineSelector apiBase={API_BASE} />
+
+          {/* Copybook (notes/files) + Clipboard history + Scratch + Backup/Restore */}
           <Copybook apiBase={API_BASE} />
           <ClipboardHistory apiBase={API_BASE} />
+          <TypingBuffer apiBase={API_BASE} />
           <BackupRestore apiBase={API_BASE} />
 
           {/* Core AI reconstruction cockpit card */}
@@ -1016,7 +1032,7 @@ export default function App() {
             initial={{ scale: 0.95, opacity: 0, y: 30 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.95, opacity: 0, y: 30 }}
-            className="fixed bottom-6 right-6 z-50 w-72 bg-slate-900/90 border border-emerald-500/20 rounded-xl p-4 shadow-3xl backdrop-blur-xl pointer-events-auto"
+            className="group fixed bottom-6 right-6 z-50 w-72 bg-slate-900/90 border border-emerald-500/20 rounded-xl p-4 shadow-3xl backdrop-blur-xl pointer-events-auto opacity-20 hover:opacity-100 transition-opacity duration-300"
           >
             <div className="flex items-center justify-between pb-1.5 border-b border-slate-850 mb-2.5">
               <span className="text-[9.5px] font-mono font-bold tracking-wider text-slate-400 flex items-center gap-1">
@@ -1051,9 +1067,27 @@ export default function App() {
               </div>
             </div>
             
-            <div className="mt-3 pt-2 border-t border-slate-850 text-slate-600 text-[9px] flex justify-between">
-              <span>Coordinates pinned</span>
-              <span>v3.0.1</span>
+            {/* Live machine resources (revealed on hover) */}
+            <div className="mt-2.5 pt-2 border-t border-slate-850 space-y-1 text-[10.5px] font-mono text-slate-400">
+              <div className="flex justify-between">
+                <span>RAM:</span>
+                <span className={hudStats && hudStats.ramPct > 85 ? "text-red-400 font-bold" : "text-emerald-400"}>
+                  {hudStats ? `${hudStats.ramUsedGB}/${hudStats.ramTotalGB} GB (${hudStats.ramPct}%)` : "…"}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span>CPU / LOAD:</span>
+                <span className="text-cyan-400">{hudStats ? `${hudStats.cpus} cores · ${hudStats.loadavg.toFixed(2)}` : "…"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>UPTIME:</span>
+                <span className="text-slate-300">{hudStats ? `${hudStats.uptimeHrs}h` : "…"}</span>
+              </div>
+            </div>
+
+            <div className="mt-2.5 pt-2 border-t border-slate-850 text-slate-600 text-[9px] flex justify-between">
+              <span>{hudStats?.hostname || "Coordinates pinned"}</span>
+              <span>v3.1</span>
             </div>
           </motion.div>
         )}

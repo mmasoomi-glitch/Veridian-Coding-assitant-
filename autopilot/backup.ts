@@ -16,7 +16,7 @@ import path from "node:path";
 
 const SSH_KEY = process.env.DEPLOY_SSH_KEY || path.join(process.env.USERPROFILE || "", ".ssh", "veridian_deploy");
 const HOST = process.env.DEPLOY_HOST || "root@89.167.49.209";
-const BACKUP_ROOT = process.env.BACKUP_ROOT || "/mnt/volume-hel1-1/veridian-backups";
+const BACKUP_ROOT = process.env.BACKUP_ROOT || "/mnt/HC_Volume_106116955/veridian-backups";
 
 const LOG_FILE = path.join(process.cwd(), "backup-log.json");
 

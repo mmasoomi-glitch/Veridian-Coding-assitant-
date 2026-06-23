@@ -1,6 +1,20 @@
-import { promises as fs } from "node:fs";
+// "Waiting On You" sensor.
+//
+// Instead of scraping random Claude task logs under %LOCALAPPDATA%\Temp\claude
+// (which surfaced HTML, git-status lines, build chatter and stray `}`), this
+// derives the inbox from THIS project's own persistent state files:
+//
+//   - sessions.json       — per-desktop persistent Claude sessions
+//                           (written by autopilot/sessions.ts)
+//   - fleet-progress.json — autopilot fleet run log, newest-first
+//                           (written by autopilot/fleet.ts)
+//
+// Each becomes a clean, meaningful item: which AI session / fleet run, its
+// latest output, and how long since it last spoke. Everything is wrapped in
+// try/catch; this module never throws and returns [] on any failure.
+
+import * as fs from "node:fs";
 import * as path from "node:path";
-import * as os from "node:os";
 
 export interface WaitingItem {
   source: string;
@@ -11,163 +25,106 @@ export interface WaitingItem {
   path: string;
 }
 
-const MAX_FILE_BYTES = 5 * 1024 * 1024; // 5 MB
-const TAIL_BYTES = 2 * 1024; // ~2KB tail
-const MAX_FILES = 200;
-const FINISHED_SEC = 60;
+const FINISHED_SEC = 120;
+const MAX_DETAIL = 160;
+const MAX_FLEET = 5;
+const MAX_ITEMS = 12;
 
-function getIdleSec(): number {
-  const raw = process.env.CLAUDE_IDLE_SEC;
-  if (raw) {
-    const n = Number(raw);
-    if (Number.isFinite(n) && n >= 0) return n;
-  }
-  return 15;
+function oneLine(raw: unknown): string {
+  const s = String(raw ?? "")
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  return s.length > MAX_DETAIL ? s.slice(0, MAX_DETAIL) : s;
 }
 
-function getRoots(): string[] {
-  const roots: string[] = [];
-  const seen = new Set<string>();
-  const add = (p: string | undefined) => {
-    if (!p) return;
-    const norm = path.resolve(p);
-    const key = norm.toLowerCase();
-    if (seen.has(key)) return;
-    seen.add(key);
-    roots.push(norm);
-  };
-
-  if (process.env.CLAUDE_LOG_ROOT) {
-    add(process.env.CLAUDE_LOG_ROOT);
-  } else {
-    add(path.join(os.tmpdir(), "claude"));
-    if (process.env.LOCALAPPDATA) {
-      add(path.join(process.env.LOCALAPPDATA, "Temp", "claude"));
-    }
-  }
-  return roots;
+function ageFrom(ts: unknown, now: number): number {
+  const ms = Date.parse(String(ts ?? ""));
+  if (!Number.isFinite(ms)) return Number.MAX_SAFE_INTEGER;
+  const sec = (now - ms) / 1000;
+  return Number.isFinite(sec) && sec >= 0 ? sec : 0;
 }
 
-interface Candidate {
-  path: string;
-  mtimeMs: number;
-  size: number;
+function statusFor(ageSec: number): "idle" | "finished" {
+  return ageSec >= FINISHED_SEC ? "finished" : "idle";
 }
 
-async function collectFiles(root: string, out: Candidate[]): Promise<void> {
-  let entries: import("node:fs").Dirent[];
+function readJsonArray(file: string): any[] {
   try {
-    entries = await fs.readdir(root, { withFileTypes: true });
+    const raw = fs.readFileSync(file, "utf8");
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
-    return; // root or subdir doesn't exist / not accessible
+    return [];
   }
-  for (const entry of entries) {
-    const full = path.join(root, entry.name);
+}
+
+function sessionItems(now: number): WaitingItem[] {
+  const items: WaitingItem[] = [];
+  const rows = readJsonArray(path.join(process.cwd(), "sessions.json"));
+  for (const s of rows) {
     try {
-      if (entry.isDirectory()) {
-        if (entry.name === "node_modules") continue;
-        await collectFiles(full, out);
-      } else if (entry.isFile()) {
-        const lower = entry.name.toLowerCase();
-        if (!lower.endsWith(".output") && !lower.endsWith(".jsonl")) continue;
-        const st = await fs.stat(full);
-        out.push({ path: full, mtimeMs: st.mtimeMs, size: st.size });
-      }
+      const desktop = Number(s?.desktop) || 0;
+      const sessionId = s?.sessionId != null ? String(s.sessionId) : null;
+      const project = s?.project != null ? String(s.project) : "";
+      const detail = oneLine(s?.lastSummary);
+      const ageSec = ageFrom(s?.lastTs, now);
+      const title = `Desktop ${desktop}${project ? " · " + project : ""}`;
+      items.push({
+        source: "session",
+        title,
+        detail,
+        ageSec,
+        status: statusFor(ageSec),
+        path: `session:${sessionId || desktop}`
+      });
     } catch {
-      // skip unreadable entry
+      // skip malformed row
     }
   }
+  return items;
 }
 
-async function readTail(filePath: string, size: number): Promise<string> {
-  const readLen = Math.min(TAIL_BYTES, size);
-  if (readLen <= 0) return "";
-  const start = Math.max(0, size - readLen);
-  const fh = await fs.open(filePath, "r");
-  try {
-    const buf = Buffer.alloc(readLen);
-    await fh.read(buf, 0, readLen, start);
-    return buf.toString("utf8");
-  } finally {
-    await fh.close();
-  }
-}
-
-function lastNonEmptyLine(text: string): string {
-  const lines = text.split(/\r?\n/);
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const trimmed = lines[i].trim();
-    if (trimmed.length > 0) {
-      return trimmed.length > 160 ? trimmed.slice(0, 160) : trimmed;
+function fleetItems(now: number): WaitingItem[] {
+  const items: WaitingItem[] = [];
+  // fleet-progress.json is stored newest-first; take the most recent few.
+  const rows = readJsonArray(path.join(process.cwd(), "fleet-progress.json")).slice(0, MAX_FLEET);
+  for (const e of rows) {
+    try {
+      const project = String(e?.project ?? "");
+      const mode = String(e?.mode ?? "");
+      const ts = String(e?.ts ?? "");
+      const detail = oneLine(e?.summary);
+      const ageSec = ageFrom(ts, now);
+      items.push({
+        source: "fleet",
+        title: `${project} (${mode})`,
+        detail,
+        ageSec,
+        status: statusFor(ageSec),
+        path: `fleet:${ts}:${project}`
+      });
+    } catch {
+      // skip malformed row
     }
   }
-  return "";
-}
-
-// Infrastructure / build noise that is NOT a real "waiting on you" item — e.g.
-// this app's own dev-server, gradle, vite, and npm background logs. These live
-// in the same temp/claude task dir, so we filter them out by content.
-const NOISE = /\[vite\]|hmr update|page reload|gradlew|operable program|> Task :|BUILD (SUCCESSFUL|FAILED)|Telemetry poller|Veridian Server listening|npm (warn|error|run)|vite v\d|^[{}\s]*$/i;
-
-function isNoise(tail: string, detail: string): boolean {
-  if (!detail) return true;
-  if (NOISE.test(detail)) return true;
-  // If the whole tail is dominated by build/dev-server chatter, skip it.
-  if (/\[vite\]|> Task :|gradlew|Telemetry poller/i.test(tail)) return true;
-  return false;
+  return items;
 }
 
 export async function getWaitingItems(): Promise<WaitingItem[]> {
   try {
-    const roots = getRoots();
-    const candidates: Candidate[] = [];
-    for (const root of roots) {
-      await collectFiles(root, candidates);
-    }
-
-    // Cap at MAX_FILES by mtime desc (most recent first)
-    candidates.sort((a, b) => b.mtimeMs - a.mtimeMs);
-    const limited = candidates.slice(0, MAX_FILES);
-
-    const idleSec = getIdleSec();
     const now = Date.now();
-    const items: WaitingItem[] = [];
+    const all = [...sessionItems(now), ...fleetItems(now)];
 
-    for (const c of limited) {
-      try {
-        if (c.size <= 0) continue; // non-empty required
-        const ageSec = (now - c.mtimeMs) / 1000;
-        if (ageSec < idleSec) continue;
-
-        // Only ever read the tail (<= TAIL_BYTES) regardless of file size, so even
-        // files larger than MAX_FILE_BYTES are cheap to inspect. readTail uses the
-        // real size to compute the correct end offset.
-        const tail = await readTail(c.path, c.size);
-        const detail = lastNonEmptyLine(tail);
-
-        if (isNoise(tail, detail)) continue; // drop infra/build log noise
-
-        const lower = c.path.toLowerCase();
-        let source: string;
-        let title: string;
-        if (lower.endsWith(".output")) {
-          source = "task";
-          title = path.basename(c.path, path.extname(c.path));
-        } else {
-          source = "transcript";
-          title = path.basename(path.dirname(c.path));
-        }
-
-        const status: "idle" | "finished" = ageSec >= FINISHED_SEC ? "finished" : "idle";
-
-        items.push({ source, title, detail, ageSec, status, path: c.path });
-      } catch {
-        // skip this file on any per-file error
-      }
+    // Dedupe by path (first occurrence wins).
+    const byPath = new Map<string, WaitingItem>();
+    for (const item of all) {
+      if (!byPath.has(item.path)) byPath.set(item.path, item);
     }
 
-    items.sort((a, b) => a.ageSec - b.ageSec);
-    return items;
+    return Array.from(byPath.values())
+      .sort((a, b) => a.ageSec - b.ageSec)
+      .slice(0, MAX_ITEMS);
   } catch {
     return [];
   }

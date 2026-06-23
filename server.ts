@@ -17,6 +17,10 @@ import { getGitStats } from "./telemetry/gitstats";
 import { generatePdr, listPdrs, getPdr } from "./autopilot/pdr";
 import * as prompts from "./autopilot/prompts-store";
 import { backupFolder, listBackups, restoreFolder } from "./autopilot/backup";
+import { recordMachine, listMachines, getMachine } from "./autopilot/sync-store";
+import { startSyncClient } from "./autopilot/sync-client";
+import { saveScratch, getScratch } from "./autopilot/scratch-store";
+import os from "os";
 
 dotenv.config();
 
@@ -545,6 +549,33 @@ app.post("/api/backup", async (req, res) => res.json(await backupFolder(String(r
 app.get("/api/backups", async (req, res) => res.json(await listBackups()));
 app.post("/api/restore", async (req, res) => res.json(await restoreFolder(String(req.body?.name || ""), String(req.body?.dest || ""))));
 
+// 4n-ii. Central command — multi-machine sync.
+app.post("/api/sync/push", (req, res) => { recordMachine(req.body || {}); res.json({ ok: true }); });
+app.get("/api/sync/machines", (req, res) => res.json(listMachines()));
+app.get("/api/sync/machine/:id", (req, res) => {
+  const m = getMachine(req.params.id);
+  return m ? res.json(m) : res.status(404).json({ error: "not found" });
+});
+
+// 4n-iii. Scratch / typing-recovery buffer (local).
+app.get("/api/scratch", (req, res) => res.json(getScratch()));
+app.post("/api/scratch", (req, res) => res.json(saveScratch(String(req.body?.text ?? ""))));
+
+// 4n-iv. Lightweight machine stats for the HUD (RAM + uptime, cross-platform).
+app.get("/api/stats", (req, res) => {
+  const total = os.totalmem(), free = os.freemem();
+  res.json({
+    ramTotalGB: +(total / 1073741824).toFixed(1),
+    ramUsedGB: +((total - free) / 1073741824).toFixed(1),
+    ramPct: Math.round(((total - free) / total) * 100),
+    cpus: os.cpus().length,
+    loadavg: os.loadavg()[0] || 0,
+    uptimeHrs: +(os.uptime() / 3600).toFixed(1),
+    hostname: os.hostname(),
+    platform: os.platform()
+  });
+});
+
 // 4o. Launch a safe, whitelisted local tool (for the command palette).
 app.post("/api/launch", (req, res) => {
   const what = String(req.body?.what || "");
@@ -639,6 +670,11 @@ async function startServer() {
     console.log(`Veridian Server listening at http://localhost:${PORT}`);
     console.log(`Database store allocated at: ${SESSION_DB_PATH}`);
     startTelemetryPoller();
+    // Push this machine's state to the central command server (if CENTRAL_URL set).
+    startSyncClient(async () => {
+      const shaped = shapeTelemetry(await collectTelemetry());
+      return { currentState: shaped.currentState, sessions: listSessions(), waiting: await getWaitingItems() };
+    });
   });
 }
 
