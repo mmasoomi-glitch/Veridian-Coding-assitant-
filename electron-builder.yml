@@ -1,0 +1,51 @@
+appId: com.veridian.app
+productName: Veridian
+copyright: Veridian
+
+directories:
+  output: C:\build-veridian\release
+  buildResources: windows-app
+
+# What goes INSIDE app.asar (the Electron app itself).
+# The server is NOT run from here — it runs from extraResources (see below) so
+# that process.cwd()-relative reads in server.ts resolve against a real folder.
+files:
+  - electron/main.cjs
+  - package.json
+
+# Shipped UNPACKED under process.resourcesPath. The server child sets cwd to
+# process.resourcesPath, so server.ts finds:
+#   dist/ (static web + server.cjs), telemetry/*.ps1, node_modules, ai/, autopilot/
+# and writes its data JSONs there.
+extraResources:
+  - from: dist
+    to: dist
+  - from: telemetry
+    to: telemetry
+  - from: autopilot
+    to: autopilot
+  - from: ai
+    to: ai
+  - from: windows-app
+    to: windows-app
+  - from: node_modules
+    to: node_modules
+    filter:
+      - "**/*"
+      - "!**/.cache/**"
+      - "!**/electron/dist/**"
+      - "!**/electron-builder/**"
+      - "!**/app-builder-bin/**"
+
+win:
+  icon: windows-app/veridian.ico
+  target:
+    - portable
+
+portable:
+  artifactName: Veridian.exe
+
+# We manage node_modules manually via extraResources; don't let electron-builder
+# try to install/prune production deps into the asar.
+npmRebuild: false
+asar: true

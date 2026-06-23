@@ -21,7 +21,7 @@ import { backupFolder, listBackups, restoreFolder } from "./autopilot/backup";
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const PORT = parseInt(process.env.PORT || "3000", 10);
 const SESSION_DB_PATH = path.join(process.cwd(), "workspace-sessions.json");
 
 // CORS — allow the packaged APK WebView (capacitor://, http(s)://localhost)
