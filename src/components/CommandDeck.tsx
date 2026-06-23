@@ -47,6 +47,15 @@ export default function CommandDeck({ apiBase, desktopCount = 4 }: { apiBase: st
   const [thinking, setThinking] = useState(false);
   const [desktopBusy, setDesktopBusy] = useState<number | null>(null);
   const [status, setStatus] = useState<string>("");
+  const [hover, setHover] = useState<{ n: number; info: any } | null>(null);
+
+  const loadDesktopInfo = async (n: number) => {
+    setHover({ n, info: null });
+    try {
+      const r = await fetch(`${apiBase}/api/desktop/info?n=${n}`);
+      if (r.ok) setHover({ n, info: await r.json() });
+    } catch { /* ignore */ }
+  };
 
   const loadWaiting = useCallback(async () => {
     try {
@@ -161,11 +170,13 @@ export default function CommandDeck({ apiBase, desktopCount = 4 }: { apiBase: st
         <div className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-wider text-cyan-400 mb-2">
           <MonitorCheck className="h-3.5 w-3.5" /> Jump to Desktop
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 relative">
           {Array.from({ length: desktopCount }, (_, i) => i + 1).map((n) => (
             <button
               key={n}
               onClick={() => switchDesktop(n)}
+              onMouseEnter={() => loadDesktopInfo(n)}
+              onMouseLeave={() => setHover((h) => (h?.n === n ? null : h))}
               disabled={desktopBusy !== null}
               className="px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-700 bg-slate-950 text-slate-200 hover:border-cyan-500/50 hover:text-cyan-300 transition-all disabled:opacity-50 flex items-center gap-1"
             >
@@ -174,6 +185,28 @@ export default function CommandDeck({ apiBase, desktopCount = 4 }: { apiBase: st
             </button>
           ))}
         </div>
+        <AnimatePresence>
+          {hover && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="mt-2 bg-slate-950 border border-cyan-500/30 rounded-lg p-2.5 text-[11px] space-y-1"
+            >
+              <div className="font-bold text-cyan-300">Desktop {hover.n}{hover.info?.project ? ` · ${hover.info.project}` : ""}</div>
+              {!hover.info && <div className="text-slate-500 font-mono">loading…</div>}
+              {hover.info?.projectPath && <div className="text-slate-400 font-mono truncate">{hover.info.projectPath}</div>}
+              {hover.info?.wasDoing && <div className="text-slate-300"><span className="text-slate-500">was doing: </span>{hover.info.wasDoing}</div>}
+              {hover.info?.nextStep && <div className="text-slate-300"><span className="text-slate-500">next: </span>{hover.info.nextStep}</div>}
+              {hover.info?.sessionId && <div className="text-purple-300 font-mono truncate"><span className="text-slate-500">claude session: </span>{hover.info.sessionId}</div>}
+              {hover.info?.sessionSummary && <div className="text-slate-400 line-clamp-2">{hover.info.sessionSummary}</div>}
+              {hover.info && !hover.info.project && !hover.info.wasDoing && !hover.info.sessionId && (
+                <div className="text-slate-500">No project/activity recorded for this desktop yet. Add it in the Fleet panel.</div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Autopilot */}

@@ -10,6 +10,13 @@ import { chatJSON, activeProvider } from "./ai/providers";
 import { recordFeedback, autonomyFor } from "./autopilot/learn";
 import { saveBrief, getBrief, allBriefs } from "./autopilot/desktop-briefs";
 import { readProjects, writeProjects, fleetStatus, startFleetRun } from "./autopilot/fleet";
+import { listSessions, runDesktopSession } from "./autopilot/sessions";
+import * as notebook from "./autopilot/notebook";
+import * as clipHistory from "./autopilot/clip-history";
+import { getGitStats } from "./telemetry/gitstats";
+import { generatePdr, listPdrs, getPdr } from "./autopilot/pdr";
+import * as prompts from "./autopilot/prompts-store";
+import { backupFolder, listBackups, restoreFolder } from "./autopilot/backup";
 
 dotenv.config();
 
@@ -224,6 +231,7 @@ app.get("/api/telemetry/current", async (req, res) => {
     const raw = await collectTelemetry();
     const shaped = shapeTelemetry(raw);
     recordTelemetry(shaped); // persist into the rolling live-telemetry session
+    if (raw.clipboard) clipHistory.record(String(raw.clipboard)); // local clipboard history
     res.json(shaped);
   } catch (error: any) {
     console.error("Telemetry collection failed:", error);
@@ -242,6 +250,7 @@ function startTelemetryPoller() {
     try {
       const raw = await collectTelemetry();
       recordTelemetry(shapeTelemetry(raw));
+      if (raw.clipboard) clipHistory.record(String(raw.clipboard));
     } catch (e) {
       // best-effort; ignore transient collection errors
     }
@@ -364,6 +373,28 @@ app.post("/api/desktop/brief", (req, res) => {
   res.json({ ok: true, brief: getBrief(desktop) });
 });
 
+// 4c-ii. Per-desktop info for hover tooltips: project, what you were doing,
+//        next step, and (once a session exists) the Claude session id.
+app.get("/api/desktop/info", (req, res) => {
+  const n = parseInt(String(req.query.n), 10);
+  const label = `Desktop ${n}`;
+  const brief = getBrief(label);
+  const project = readProjects().find((p) => p.desktop === n);
+  const session = listSessions().find((s) => s.desktop === n);
+  res.json({
+    desktop: n,
+    project: project?.name || (brief?.raw?.label) || null,
+    projectPath: project?.path || null,
+    goal: project?.goal || null,
+    mode: project?.mode || null,
+    wasDoing: brief?.wasDoing || null,
+    nextStep: brief?.nextStep || null,
+    updatedAt: brief?.updatedAt || null,
+    sessionId: session?.sessionId || null,
+    sessionSummary: session?.lastSummary || null
+  });
+});
+
 // 4d. "Waiting on you" — agents/terminals/logs that finished and need input.
 app.get("/api/waiting", async (req, res) => {
   try {
@@ -448,6 +479,89 @@ app.post("/api/fleet/run", (req, res) => {
   const desktop = req.body?.desktop ? parseInt(String(req.body.desktop), 10) : undefined;
   const result = startFleetRun(mode, desktop);
   res.status(result.started ? 202 : 409).json(result);
+});
+
+// 4h. Persistent per-desktop Claude sessions (independent, --resume).
+app.get("/api/sessions/list", (req, res) => res.json(listSessions()));
+app.post("/api/sessions/run", async (req, res) => {
+  const { desktop, project, cwd, event, mode } = req.body || {};
+  if (!desktop || !event) return res.status(400).json({ error: "desktop and event required" });
+  res.json(await runDesktopSession({ desktop: parseInt(String(desktop), 10), project, cwd, event: String(event), mode }));
+});
+
+// 4i. Copybook — notes / files / snippets.
+app.get("/api/notebook", (req, res) => res.json(notebook.listEntries()));
+app.post("/api/notebook", (req, res) => {
+  const { type, title, content, project } = req.body || {};
+  res.json(notebook.addEntry({ type: type || "note", title: title || "", content: content || "", project }));
+});
+app.post("/api/notebook/file", (req, res) => {
+  const { name, base64, project } = req.body || {};
+  if (!name || !base64) return res.status(400).json({ error: "name and base64 required" });
+  res.json(notebook.saveFile(String(name), String(base64), project));
+});
+app.delete("/api/notebook/:id", (req, res) => { notebook.deleteEntry(req.params.id); res.json({ ok: true }); });
+app.get("/api/notebook/file/:id", (req, res) => {
+  const entry = notebook.listEntries().find((e: any) => e.id === req.params.id);
+  if (!entry || entry.type !== "file") return res.status(404).json({ error: "not found" });
+  res.sendFile(path.join(process.cwd(), entry.content));
+});
+
+// 4j. Clipboard history (last 50, click-to-restore). Local only.
+app.get("/api/clipboard/history", (req, res) => res.json(clipHistory.list()));
+app.post("/api/clipboard/restore", async (req, res) => {
+  const ok = await clipHistory.restore(String(req.body?.id));
+  res.json({ ok });
+});
+app.post("/api/clipboard/clear", (req, res) => { clipHistory.clear(); res.json({ ok: true }); });
+
+// 4k. Per-project git stats.
+app.get("/api/gitstats", async (req, res) => res.json(await getGitStats(String(req.query.path || ""))));
+
+// 4l. PDR — idea -> structured product spec (via the active AI provider).
+app.post("/api/pdr/generate", async (req, res) => {
+  try {
+    res.json(await generatePdr(String(req.body?.idea || "")));
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || String(e) });
+  }
+});
+app.get("/api/pdr", (req, res) => res.json(listPdrs()));
+app.get("/api/pdr/:id", (req, res) => {
+  const p = getPdr(req.params.id);
+  return p ? res.json(p) : res.status(404).json({ error: "not found" });
+});
+
+// 4m. Prompt inventory.
+app.get("/api/prompts", (req, res) => res.json(prompts.listPrompts()));
+app.post("/api/prompts", (req, res) => {
+  const { title, body, tags } = req.body || {};
+  res.json(prompts.addPrompt({ title: title || "", body: body || "", tags: tags || [] }));
+});
+app.delete("/api/prompts/:id", (req, res) => { prompts.deletePrompt(req.params.id); res.json({ ok: true }); });
+
+// 4n. Backup / restore to the Hetzner volume (over SSH).
+app.post("/api/backup", async (req, res) => res.json(await backupFolder(String(req.body?.path || ""))));
+app.get("/api/backups", async (req, res) => res.json(await listBackups()));
+app.post("/api/restore", async (req, res) => res.json(await restoreFolder(String(req.body?.name || ""), String(req.body?.dest || ""))));
+
+// 4o. Launch a safe, whitelisted local tool (for the command palette).
+app.post("/api/launch", (req, res) => {
+  const what = String(req.body?.what || "");
+  const cwd = process.env.VERIDIAN_WATCH_DIR || process.cwd();
+  const map: Record<string, { cmd: string; args: string[] }> = {
+    vscode: { cmd: "code", args: [cwd] },
+    terminal: { cmd: "wt", args: ["-d", cwd] },
+    repo: { cmd: "cmd", args: ["/c", "start", "", "https://github.com/mmasoomi-glitch/Veridian-Coding-assitant-"] }
+  };
+  const entry = map[what];
+  if (!entry) return res.status(400).json({ error: "unknown target" });
+  try {
+    execFile(entry.cmd, entry.args, { shell: true, windowsHide: true }, () => {});
+    res.json({ ok: true });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
 });
 
 // 5. ElevenLabs Text-to-Speech v3 BYOK Proxy

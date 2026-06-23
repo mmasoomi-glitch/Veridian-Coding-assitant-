@@ -40,6 +40,12 @@ import SensorsSimulator from "./components/SensorsSimulator";
 import ApkCompanion from "./components/ApkCompanion";
 import CommandDeck from "./components/CommandDeck";
 import AutopilotFleet from "./components/AutopilotFleet";
+import Copybook from "./components/Copybook";
+import ClipboardHistory from "./components/ClipboardHistory";
+import PdrGenerator from "./components/PdrGenerator";
+import PromptInventory from "./components/PromptInventory";
+import BackupRestore from "./components/BackupRestore";
+import CommandPalette from "./components/CommandPalette";
 
 // Base URL for the backend API. Empty string => same-origin relative calls
 // (web/dev). For the packaged APK, set VITE_API_BASE at build time to the
@@ -652,30 +658,8 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Preset Buttons for Scenarios */}
-          <div className="bg-slate-950 rounded-lg p-1 border border-slate-800 flex gap-1">
-            <button 
-              onClick={() => loadScenario(1)}
-              className={`text-xs px-2.5 py-1.5 rounded-md font-mono transition-all ${currentState.gitRepo === "mira-vpn" ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30" : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"}`}
-              title="AFAQ VPN developer session after lunchtime"
-            >
-              📍 Scenario A
-            </button>
-            <button 
-              onClick={() => loadScenario(2)}
-              className={`text-xs px-2.5 py-1.5 rounded-md font-mono transition-all ${currentState.gitRepo === "afaq-os" ? "bg-purple-500/15 text-purple-300 border border-purple-500/30" : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"}`}
-              title="Claude Code agent running in background"
-            >
-              🤖 Scenario B
-            </button>
-            <button 
-              onClick={() => loadScenario(3)}
-              className={`text-xs px-2.5 py-1.5 rounded-md font-mono transition-all ${currentState.virtualDesktop.includes("Personal") ? "bg-pink-500/15 text-pink-300 border border-pink-500/30" : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"}`}
-              title="Simulates rapid desktop switching chaos"
-            >
-              ⚡ Scenario C
-            </button>
-          </div>
+          {/* Scenario A/B/C demo presets removed — replaced by real PDR + Prompt
+              Inventory panels in the main column. */}
 
           <button
             onClick={() => setShowOverlayWidget(prev => !prev)}
@@ -751,11 +735,23 @@ export default function App() {
             </div>
           )}
 
+          {/* Global command palette + hotkeys (Ctrl/Cmd+K) */}
+          <CommandPalette apiBase={API_BASE} />
+
           {/* Command Deck: desktop switch + autopilot + waiting-on-you */}
           <CommandDeck apiBase={API_BASE} desktopCount={4} />
 
           {/* Autopilot Fleet: one Opus session per desktop project */}
           <AutopilotFleet apiBase={API_BASE} />
+
+          {/* PDR generator + Prompt inventory (replaced the fake Scenario buttons) */}
+          <PdrGenerator apiBase={API_BASE} />
+          <PromptInventory apiBase={API_BASE} />
+
+          {/* Copybook (notes/files) + Clipboard history + Backup/Restore */}
+          <Copybook apiBase={API_BASE} />
+          <ClipboardHistory apiBase={API_BASE} />
+          <BackupRestore apiBase={API_BASE} />
 
           {/* Core AI reconstruction cockpit card */}
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-2xl relative overflow-hidden">

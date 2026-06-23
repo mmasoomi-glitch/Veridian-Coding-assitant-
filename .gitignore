@@ -13,6 +13,14 @@ workspace-sessions.json
 desktop-briefs.json
 autopilot-learning.json
 fleet-progress.json
+sessions.json
+notebook.json
+notebook-files/
+clip-history.json
+keystroke-buffer.txt
+pdr-store.json
+prompts.json
+backup-log.json
 
 # Android build artifacts (the android/ native project itself is committed)
 android/.gradle/
