@@ -23,6 +23,7 @@ prompts.json
 backup-log.json
 sync-machines.json
 scratch-buffer.json
+totp-config.json
 
 # Android build artifacts (the android/ native project itself is committed)
 android/.gradle/

@@ -20,6 +20,7 @@ import { backupFolder, listBackups, restoreFolder } from "./autopilot/backup";
 import { recordMachine, listMachines, getMachine } from "./autopilot/sync-store";
 import { startSyncClient } from "./autopilot/sync-client";
 import { saveScratch, getScratch } from "./autopilot/scratch-store";
+import * as totp from "./auth/totp";
 import os from "os";
 
 dotenv.config();
@@ -45,6 +46,46 @@ app.use((req, res, next) => {
 
 // Middleware
 app.use(express.json());
+
+// --- Admin TOTP auth (active only when VERIDIAN_AUTH=totp; local stays open) ---
+function getCookie(req: any, name: string): string {
+  const raw = req.headers.cookie || "";
+  for (const part of raw.split(";")) {
+    const [k, ...v] = part.trim().split("=");
+    if (k === name) return decodeURIComponent(v.join("="));
+  }
+  return "";
+}
+app.use((req, res, next) => {
+  if (!totp.authRequired()) return next();
+  const p = req.path;
+  // Allow auth endpoints + the SPA shell/static through; gate the data APIs.
+  if (p.startsWith("/api/auth/") || !p.startsWith("/api/")) return next();
+  if (totp.verifySessionToken(getCookie(req, "vsess"))) return next();
+  return res.status(401).json({ error: "auth required" });
+});
+app.get("/api/auth/status", (req, res) => res.json({
+  required: totp.authRequired(),
+  authed: totp.verifySessionToken(getCookie(req, "vsess")),
+  configured: totp.isConfigured()
+}));
+app.post("/api/auth/login", (req, res) => {
+  const { code, recovery } = req.body || {};
+  const ok = recovery ? totp.verifyRecovery(String(recovery)) : totp.verifyCode(String(code || ""));
+  if (!ok) return res.status(401).json({ ok: false, error: "invalid code" });
+  const secure = req.headers["x-forwarded-proto"] === "https" ? "; Secure" : "";
+  res.setHeader("Set-Cookie", `vsess=${encodeURIComponent(totp.createSessionToken())}; HttpOnly; Path=/; Max-Age=604800; SameSite=Lax${secure}`);
+  res.json({ ok: true });
+});
+app.get("/api/auth/setup", async (req, res) => {
+  const local = ["localhost", "127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.hostname) || String(req.ip || "").includes("127.0.0.1");
+  if (!local && totp.isConfigured()) return res.status(403).json({ error: "setup locked" });
+  res.json(await totp.getSetupInfo());
+});
+app.post("/api/auth/logout", (req, res) => {
+  res.setHeader("Set-Cookie", "vsess=; HttpOnly; Path=/; Max-Age=0");
+  res.json({ ok: true });
+});
 
 // Helper to read database
 function readSessionDb() {
