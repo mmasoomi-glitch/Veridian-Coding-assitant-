@@ -304,30 +304,23 @@ export default function App() {
       setErrorMessage(e?.message || "Verify your API configuration");
 
       setTimeout(() => {
+        // Honest fallback: ONLY real live telemetry, no invented projects/files.
+        const mods = currentState.modifiedFiles || [];
+        const isSecret = (currentState as any).clipboardIsSecret;
         setAiBriefing({
-          currentProject: currentState.gitRepo === "mira-vpn" ? "Mira VPN" : "AFAQ Kernel OS",
-          focus: `Switched into ${currentState.activeApp} reviewing '${currentState.windowTitle}' on virtual desktop ${currentState.virtualDesktop}`,
-          completed: activeSession.completedTasks.length > 0 
-            ? activeSession.completedTasks 
-            : ["Initiated active session setup", "Created local file system checks"],
-          pending: [
-            `Continue modifications to ${currentState.windowTitle}`,
-            currentState.modifiedFiles.length > 0 
-              ? `Commit stashed files: ${currentState.modifiedFiles.join(", ")}`
-              : "Synchronize local folder repository and stage next feature",
-            ...(activeSession.pendingTasks || [])
-          ],
+          currentProject: currentState.gitRepo || "—",
+          focus: currentState.windowTitle
+            ? `${currentState.activeApp}: ${currentState.windowTitle}`
+            : "Live telemetry only (AI brain offline — set CLAUDE_CODE_OAUTH_TOKEN)",
+          completed: [],
+          pending: mods.length ? [`Commit ${mods.length} modified file(s) in ${currentState.gitRepo || "workspace"}`] : [],
           risks: [
-            currentState.modifiedFiles.length >= 2 
-              ? `${currentState.modifiedFiles.length} files currently uncommitted.`
-              : "No massive uncommitted work.",
-            !currentState.clipboardPasted && currentState.clipboardContent
-              ? `Clipboard has an unpasted item matching secure credentials.`
-              : "Pruned clipboard to protect credentials state."
+            ...(mods.length >= 2 ? [`${mods.length} uncommitted files`] : []),
+            ...(isSecret ? ["A secret is sitting in your clipboard (unpasted)"] : [])
           ]
         });
         setIsLoadingSummary(false);
-      }, 700);
+      }, 300);
     }
   };
 

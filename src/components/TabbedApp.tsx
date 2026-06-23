@@ -1,0 +1,78 @@
+import React, { useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import { LayoutDashboard, Clipboard, MessageSquare, Image, ListTodo, Settings as SettingsIcon, Keyboard } from "lucide-react";
+import App from "../App";
+import ClipboardTab from "./ClipboardTab";
+import AiAskTab from "./AiAskTab";
+import ScreenshotsTab from "./ScreenshotsTab";
+import TodoTab from "./TodoTab";
+import SettingsTab from "./SettingsTab";
+import KeyloggerTab from "./KeyloggerTab";
+import BurnoutNudge from "./BurnoutNudge";
+
+const TABS = [
+  { id: "dashboard", label: "Dashboard", Icon: LayoutDashboard },
+  { id: "clipboard", label: "Clipboard", Icon: Clipboard },
+  { id: "ask", label: "AI Ask", Icon: MessageSquare },
+  { id: "shots", label: "Screenshots", Icon: Image },
+  { id: "todo", label: "Todo", Icon: ListTodo },
+  { id: "keylog", label: "Keystrokes", Icon: Keyboard },
+  { id: "settings", label: "Settings", Icon: SettingsIcon }
+];
+
+export default function TabbedApp({ apiBase }: { apiBase: string }) {
+  const [tab, setTab] = useState("dashboard");
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100">
+      {/* Tab bar */}
+      <div className="sticky top-0 z-40 bg-slate-950/90 backdrop-blur-xl border-b border-slate-800 px-4">
+        <div className="flex items-center gap-1 overflow-x-auto py-2">
+          <span className="text-emerald-400 font-bold text-sm mr-3 pl-1 tracking-tight whitespace-nowrap">◆ Veridian</span>
+          {TABS.map(({ id, label, Icon }) => (
+            <button
+              key={id}
+              onClick={() => setTab(id)}
+              className={`relative px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors whitespace-nowrap ${
+                tab === id ? "text-emerald-300" : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              {tab === id && (
+                <motion.span layoutId="tabpill" className="absolute inset-0 bg-emerald-500/15 border border-emerald-500/30 rounded-lg" transition={{ type: "spring", stiffness: 400, damping: 32 }} />
+              )}
+              <Icon className="h-3.5 w-3.5 relative z-10" />
+              <span className="relative z-10">{label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Tab content */}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={tab}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -8 }}
+          transition={{ duration: 0.22, ease: "easeOut" }}
+        >
+          {tab === "dashboard" ? (
+            <App />
+          ) : (
+            <div className="max-w-3xl mx-auto p-4 md:p-6">
+              {tab === "clipboard" && <ClipboardTab apiBase={apiBase} />}
+              {tab === "ask" && <AiAskTab apiBase={apiBase} />}
+              {tab === "shots" && <ScreenshotsTab apiBase={apiBase} />}
+              {tab === "todo" && <TodoTab apiBase={apiBase} />}
+              {tab === "keylog" && <KeyloggerTab apiBase={apiBase} />}
+              {tab === "settings" && <SettingsTab apiBase={apiBase} />}
+            </div>
+          )}
+        </motion.div>
+      </AnimatePresence>
+
+      {/* Global burnout nudge (any tab) */}
+      <BurnoutNudge apiBase={apiBase} />
+    </div>
+  );
+}

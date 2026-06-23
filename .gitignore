@@ -24,6 +24,16 @@ backup-log.json
 sync-machines.json
 scratch-buffer.json
 totp-config.json
+clip-counts.json
+ask-history.json
+todos.json
+screenshots-index.json
+screenshots/
+keystroke-metrics.json
+burnout-nudge.json
+keystroke-log.txt
+keylog.paused
+keylog.pid
 
 # Android build artifacts (the android/ native project itself is committed)
 android/.gradle/

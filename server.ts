@@ -21,6 +21,11 @@ import { recordMachine, listMachines, getMachine } from "./autopilot/sync-store"
 import { startSyncClient } from "./autopilot/sync-client";
 import { saveScratch, getScratch } from "./autopilot/scratch-store";
 import * as totp from "./auth/totp";
+import { ask, askHistory } from "./autopilot/ai-ask";
+import * as shots from "./autopilot/screenshots-store";
+import * as todos from "./autopilot/todo-store";
+import { assess as assessBurnout } from "./autopilot/burnout-store";
+import * as keylog from "./autopilot/keylog-store";
 import os from "os";
 
 dotenv.config();
@@ -296,6 +301,7 @@ function startTelemetryPoller() {
       const raw = await collectTelemetry();
       recordTelemetry(shapeTelemetry(raw));
       if (raw.clipboard) clipHistory.record(String(raw.clipboard));
+      shots.maybeCapture(String(raw.virtualDesktop || "unknown")).catch(() => {});
     } catch (e) {
       // best-effort; ignore transient collection errors
     }
@@ -562,6 +568,39 @@ app.post("/api/clipboard/clear", (req, res) => { clipHistory.clear(); res.json({
 
 // 4k. Per-project git stats.
 app.get("/api/gitstats", async (req, res) => res.json(await getGitStats(String(req.query.path || ""))));
+
+// 4k-ii. Clipboard top-repeats + autocomplete suggestions.
+app.get("/api/clipboard/top", (req, res) => res.json(clipHistory.topRepeats(5)));
+app.get("/api/clipboard/suggest", (req, res) => res.json(clipHistory.suggest(String(req.query.q || ""), 8)));
+
+// 4k-iii. AI Ask — context-aware Q&A over your clipboard/sessions/notes/screenshots.
+app.post("/api/ask", async (req, res) => {
+  try { res.json(await ask(String(req.body?.question || ""))); }
+  catch (e: any) { res.status(500).json({ error: e?.message || String(e) }); }
+});
+app.get("/api/ask/history", (req, res) => res.json(askHistory()));
+
+// 4k-iv. Screenshots context.
+app.get("/api/screenshots", (req, res) => res.json(shots.listShots()));
+app.get("/api/screenshots/img/:id", (req, res) => {
+  const p = shots.shotPath(req.params.id);
+  return p ? res.sendFile(p) : res.status(404).json({ error: "not found" });
+});
+
+// 4k-v. Todo list.
+app.get("/api/todos", (req, res) => res.json(todos.listTodos()));
+app.post("/api/todos", (req, res) => res.json(todos.addTodo(String(req.body?.text || ""), req.body?.source)));
+app.post("/api/todos/:id/toggle", (req, res) => res.json(todos.toggleTodo(req.params.id)));
+app.delete("/api/todos/:id", (req, res) => { todos.deleteTodo(req.params.id); res.json({ ok: true }); });
+
+// 4k-vi. Burnout state (from keystroke timing metrics; no key content).
+app.get("/api/burnout", (req, res) => res.json(assessBurnout()));
+
+// 4k-vii. Transparent local keystroke recorder (local only; never synced).
+app.get("/api/keylog", (req, res) => res.json({ text: keylog.recentLog(), recording: keylog.isRecording(), paused: keylog.isPaused() }));
+app.post("/api/keylog/start", (req, res) => res.json(keylog.startRecorder()));
+app.post("/api/keylog/pause", (req, res) => { keylog.setPaused(!!req.body?.paused); res.json({ ok: true, paused: keylog.isPaused() }); });
+app.post("/api/keylog/clear", (req, res) => { keylog.clearLog(); res.json({ ok: true }); });
 
 // 4l. PDR — idea -> structured product spec (via the active AI provider).
 app.post("/api/pdr/generate", async (req, res) => {
