@@ -86,9 +86,8 @@ export default function SettingsTab({ apiBase }: { apiBase: string }) {
     };
   }, [apiBase]);
 
-  // The active provider: per project design the headless Opus (Claude) is the
-  // brain. db-config tells us whether a fallback cloud key is set.
-  const provider = dbConfig?.apiKeyConfigured ? "DeepSeek key present (fallback)" : "Local Claude Code (Opus)";
+  // Single AI provider: Anthropic-compatible (Claude Opus). No fallbacks.
+  const provider = dbConfig?.apiKeyConfigured ? "Anthropic (Claude Opus)" : "Not configured — AI disabled";
 
   const testVoice = useCallback(() => {
     if (voice.speaking) {

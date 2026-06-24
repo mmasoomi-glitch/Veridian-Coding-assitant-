@@ -1,126 +1,107 @@
-// Unified LLM provider.
-//   - "claude": uses the LOCAL Claude Code CLI (your Max plan → Opus, big
-//     context, no marginal API cost). Enable with AI_PROVIDER=claude.
-//   - "openai": the API "hard brain" when OPENAI_API_KEY is set.
-//   - "deepseek": fallback so everything keeps working today.
-import { spawn } from "node:child_process";
+// Veridian AI provider — ANTHROPIC-COMPATIBLE ONLY.
+// No DeepSeek / OpenAI / Gemini / local-model / Claude-CLI fallback (remediation F-001).
+// Config is read from process.env, or from a local env file pointed to by
+// VERIDIAN_ENV_FILE. Keys are never logged, returned, or committed.
+import fs from "node:fs";
 
-interface ChatOpts {
-  system: string;
-  user: string;
-  json?: boolean;
-  temperature?: number;
-  maxTokens?: number;
+interface AnthropicConfig { baseUrl: string; apiKey: string; model: string; }
+
+function loadConfig(): AnthropicConfig {
+  let baseUrl = process.env.ANTHROPIC_BASE_URL || "";
+  let apiKey = process.env.ANTHROPIC_API_KEY || "";
+  let model = process.env.ANTHROPIC_MODEL || "";
+  const envFile = process.env.VERIDIAN_ENV_FILE;
+  if ((!baseUrl || !apiKey || !model) && envFile && fs.existsSync(envFile)) {
+    try {
+      for (const line of fs.readFileSync(envFile, "utf8").split(/\r?\n/)) {
+        const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+        if (!m) continue;
+        const k = m[1];
+        const v = m[2].trim().replace(/^["']|["']$/g, "");
+        if (k === "ANTHROPIC_BASE_URL" && !baseUrl) baseUrl = v;
+        if (k === "ANTHROPIC_API_KEY" && !apiKey) apiKey = v;
+        if (k === "ANTHROPIC_MODEL" && !model) model = v;
+      }
+    } catch { /* keep whatever we have */ }
+  }
+  return { baseUrl: baseUrl.replace(/\/+$/, ""), apiKey, model: model || "claude-opus-4-8" };
 }
 
-function pickProvider(): "claude" | "openai" | "deepseek" | null {
-  const forced = (process.env.AI_PROVIDER || "").toLowerCase();
-  const hasOpenAI = !!process.env.OPENAI_API_KEY;
-  const hasDeepSeek = !!process.env.DEEPSEEK_API_KEY;
-  if (forced === "claude") return "claude"; // local CLI; assumed logged in (Max)
-  if (forced === "openai" && hasOpenAI) return "openai";
-  if (forced === "deepseek" && hasDeepSeek) return "deepseek";
-  if (hasOpenAI) return "openai";
-  if (hasDeepSeek) return "deepseek";
-  return null;
+export function aiConfigured(): boolean {
+  const c = loadConfig();
+  return !!(c.baseUrl && c.apiKey);
 }
 
+// Kept for back-compat with existing route checks: returns the provider name or null.
 export function activeProvider(): string | null {
-  return pickProvider();
+  return aiConfigured() ? "anthropic" : null;
 }
 
-// Pull the first balanced JSON object/array out of a string (Claude may wrap it).
+interface ChatOpts { system: string; user: string; json?: boolean; temperature?: number; maxTokens?: number; }
+
 function extractJson(text: string): string {
-  const s = text.indexOf("{");
-  const a = text.indexOf("[");
+  const s = text.indexOf("{"); const a = text.indexOf("[");
   const start = s < 0 ? a : a < 0 ? s : Math.min(s, a);
   if (start < 0) return text;
   const end = Math.max(text.lastIndexOf("}"), text.lastIndexOf("]"));
   return end > start ? text.slice(start, end + 1) : text.slice(start);
 }
 
-// Run the local Claude Code CLI headless, prompt via stdin (avoids shell quoting).
-function runClaude(prompt: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const bin = process.env.CLAUDE_BIN || "claude";
-    const model = process.env.CLAUDE_MODEL || "opus";
-    const args = ["-p", "--output-format", "json", "--model", model];
-    const child = spawn(bin, args, { shell: process.platform === "win32", windowsHide: true });
-    let out = "", errOut = "";
-    const timer = setTimeout(() => child.kill(), 120000);
-    child.stdout.on("data", (d) => (out += d));
-    child.stderr.on("data", (d) => (errOut += d));
-    child.on("error", (e) => { clearTimeout(timer); reject(e); });
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      if (code === 0) resolve(out);
-      else reject(new Error(`claude exited ${code}: ${errOut.slice(0, 200)}`));
-    });
-    child.stdin.write(prompt);
-    child.stdin.end();
+async function callAnthropic(system: string, user: string, maxTokens: number, temperature: number): Promise<string> {
+  const cfg = loadConfig();
+  if (!cfg.baseUrl || !cfg.apiKey) {
+    throw new Error("AI is not configured. Set ANTHROPIC_BASE_URL and ANTHROPIC_API_KEY (via VERIDIAN_ENV_FILE).");
+  }
+  const res = await fetch(`${cfg.baseUrl}/v1/messages`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": cfg.apiKey,
+      "anthropic-version": "2023-06-01"
+    },
+    body: JSON.stringify({
+      model: cfg.model,
+      max_tokens: maxTokens,
+      temperature,
+      system,
+      messages: [{ role: "user", content: user }]
+    })
   });
+  if (!res.ok) {
+    // Never echo the provider error body (may contain sensitive context). Category only.
+    throw new Error(`anthropic_http_${res.status}`);
+  }
+  const data: any = await res.json();
+  const block = Array.isArray(data?.content) ? data.content.find((b: any) => b.type === "text") : null;
+  return String(block?.text ?? "");
 }
 
 export async function chatJSON(opts: ChatOpts): Promise<any> {
-  const provider = pickProvider();
-  if (!provider) {
-    throw new Error("No AI provider configured. Set AI_PROVIDER=claude, or OPENAI_API_KEY / DEEPSEEK_API_KEY.");
+  const text = await callAnthropic(
+    opts.system,
+    opts.json ? `${opts.user}\n\nRespond with ONLY valid JSON. No prose, no code fences.` : opts.user,
+    opts.maxTokens ?? 1024,
+    opts.temperature ?? 0.3
+  );
+  return opts.json ? JSON.parse(extractJson(text)) : text;
+}
+
+// Safe synthetic validation — sends NO personal/business/clipboard/repo content.
+// Returns sanitized status only.
+export async function validateProvider(): Promise<{
+  configured: boolean; reachable: boolean; modelAccepted: boolean; errorCategory: string | null; checkedAt: string;
+}> {
+  const checkedAt = new Date().toISOString();
+  if (!aiConfigured()) return { configured: false, reachable: false, modelAccepted: false, errorCategory: "not_configured", checkedAt };
+  try {
+    const out = await callAnthropic("You are a connectivity probe.", "Reply with the single token: OK", 16, 0);
+    return { configured: true, reachable: true, modelAccepted: out.length > 0, errorCategory: null, checkedAt };
+  } catch (e: any) {
+    const msg = String(e?.message || "");
+    const cat = msg.includes("anthropic_http_401") || msg.includes("anthropic_http_403") ? "auth"
+      : msg.includes("anthropic_http_404") || msg.includes("model") ? "model_or_endpoint"
+      : msg.includes("anthropic_http_") ? "http_error"
+      : "unreachable";
+    return { configured: true, reachable: cat !== "unreachable", modelAccepted: false, errorCategory: cat, checkedAt };
   }
-
-  if (provider === "claude") {
-    const prompt = `${opts.system}\n\n${opts.user}\n\n${opts.json ? "Respond with ONLY valid JSON. No prose, no code fences." : ""}`;
-    const raw = await runClaude(prompt);
-    let resultText = raw;
-    try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        const r = [...parsed].reverse().find((m: any) => m.type === "result");
-        resultText = (r?.result ?? parsed[parsed.length - 1]?.result ?? raw);
-      } else {
-        resultText = parsed.result ?? parsed.content ?? raw;
-      }
-    } catch { /* not JSON; use raw */ }
-    return opts.json ? JSON.parse(extractJson(String(resultText))) : String(resultText);
-  }
-
-  const cfg = provider === "openai"
-    ? {
-        url: (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1") + "/chat/completions",
-        key: process.env.OPENAI_API_KEY as string,
-        model: process.env.OPENAI_MODEL || "gpt-4o-mini"
-      }
-    : {
-        url: (process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com") + "/chat/completions",
-        key: process.env.DEEPSEEK_API_KEY as string,
-        model: process.env.DEEPSEEK_MODEL || "deepseek-chat"
-      };
-
-  const body: any = {
-    model: cfg.model,
-    messages: [
-      { role: "system", content: opts.system },
-      { role: "user", content: opts.user }
-    ],
-    temperature: opts.temperature ?? 0.3,
-    max_tokens: opts.maxTokens ?? 1024
-  };
-  if (opts.json) body.response_format = { type: "json_object" };
-
-  const res = await fetch(cfg.url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${cfg.key}`
-    },
-    body: JSON.stringify(body)
-  });
-
-  if (!res.ok) {
-    const t = await res.text();
-    throw new Error(`${provider} API ${res.status}: ${t.slice(0, 300)}`);
-  }
-
-  const data: any = await res.json();
-  const content = data?.choices?.[0]?.message?.content || (opts.json ? "{}" : "");
-  return opts.json ? JSON.parse(content) : content;
 }

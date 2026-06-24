@@ -338,7 +338,7 @@ export default function SensorsSimulator({
           </span>
         </p>
         <div className="pt-2 flex justify-between items-center text-[10px]">
-          <span>DeepSeek key: {dbConfig.apiKeyConfigured ? "🟢 Injected" : "⚠️ Key Missing"}</span>
+          <span>AI (Anthropic): {dbConfig.apiKeyConfigured ? "🟢 Configured" : "⚠️ Not configured"}</span>
           <button
             onClick={downloadSessionJson}
             className="text-emerald-400 hover:text-emerald-300 flex items-center gap-1 hover:underline cursor-pointer"

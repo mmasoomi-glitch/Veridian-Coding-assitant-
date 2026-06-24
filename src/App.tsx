@@ -66,25 +66,26 @@ export default function App() {
   const [sessions, setSessions] = useState<SessionHistory[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string>("live-telemetry");
   
-  // Current active PC sensor state (Simulated)
+  // Current PC state — starts EMPTY (no fiction). Populated only by real
+  // telemetry from /api/telemetry/current (remediation F-006).
   const [currentState, setCurrentState] = useState<WorkspaceState>({
-    virtualDesktop: "Desktop 2 (Mira VPN Dev)",
-    activeApp: "VS Code",
-    windowTitle: "auth.service.ts",
-    workspacePath: "D:\\MiraVPN",
-    gitRepo: "mira-vpn",
-    gitBranch: "develop",
-    latestCommit: "c6a1b2d3 - Add JWT verify payload",
-    modifiedFiles: ["auth.service.ts", "secure-route.ts"],
-    terminalDir: "D:\\MiraVPN",
-    terminalCommand: "docker compose up -d vpn-auth",
-    browserDomain: "claude.ai",
-    browserTitle: "Claude - Fix Token Payload Verification Code",
-    browserTabUrl: "https://claude.ai/chat/21c890-aab",
-    clipboardContent: "eyKey: 'v_prod_9921_xzz_k9'",
-    clipboardCopiedAt: "2026-06-22T06:40:00Z",
+    virtualDesktop: "unknown",
+    activeApp: "unknown",
+    windowTitle: "",
+    workspacePath: "",
+    gitRepo: "",
+    gitBranch: "",
+    latestCommit: "",
+    modifiedFiles: [],
+    terminalDir: "",
+    terminalCommand: "",
+    browserDomain: "",
+    browserTitle: "",
+    browserTabUrl: "",
+    clipboardContent: "",
+    clipboardCopiedAt: null,
     clipboardPasted: false,
-    claudeSessionId: "claude-session-81c",
+    claudeSessionId: "",
     activeTurn: "human"
   });
 
@@ -765,7 +766,7 @@ export default function App() {
           {/* Core AI reconstruction cockpit card */}
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-2xl relative overflow-hidden">
             <span className="text-[10px] font-mono text-purple-400 bg-purple-500/10 px-2 py-0.5 border border-purple-500/20 rounded font-bold absolute top-5 right-5 uppercase tracking-wider">
-              DeepSeek Smart Recall
+              Claude Opus Recall
             </span>
 
             <h2 className="text-sm font-bold text-slate-200 mb-4 pb-1.5 border-b border-slate-800/80 flex items-center gap-1.5">
@@ -905,7 +906,7 @@ export default function App() {
 
               {errorMessage && (
                 <p className="text-[10px] text-yellow-500 hover:underline text-center cursor-pointer font-mono pt-1">
-                  Heuristic active format output parsed. Configure DEEPSEEK_API_KEY to test actual LLM summaries.
+                  Local summary — no AI provider used. Configure ANTHROPIC_BASE_URL/ANTHROPIC_API_KEY (via VERIDIAN_ENV_FILE) for real Opus briefs.
                 </p>
               )}
 

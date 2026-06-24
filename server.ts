@@ -6,7 +6,7 @@ import { execFile } from "child_process";
 import { createServer as createViteServer } from "vite";
 import { recordTelemetry } from "./telemetry/persist";
 import { getWaitingItems } from "./telemetry/watcher";
-import { chatJSON, activeProvider } from "./ai/providers";
+import { chatJSON, activeProvider, aiConfigured, validateProvider } from "./ai/providers";
 import { recordFeedback, autonomyFor } from "./autopilot/learn";
 import { saveBrief, getBrief, allBriefs } from "./autopilot/desktop-briefs";
 import { readProjects, writeProjects, fleetStatus, startFleetRun } from "./autopilot/fleet";
@@ -134,7 +134,8 @@ app.get("/api/db-config", (req, res) => {
   res.json({
     dbPath: SESSION_DB_PATH,
     status: fs.existsSync(SESSION_DB_PATH) ? "active" : "failed",
-    apiKeyConfigured: !!process.env.DEEPSEEK_API_KEY
+    apiKeyConfigured: aiConfigured(),
+    aiProvider: activeProvider() || "disabled"
   });
 });
 
@@ -314,7 +315,7 @@ app.post("/api/ai/summarize", async (req, res) => {
 
   if (!activeProvider()) {
     return res.status(503).json({
-      error: "No AI provider configured. Add OPENAI_API_KEY or DEEPSEEK_API_KEY to the server .env."
+      error: "AI is not configured. Set ANTHROPIC_BASE_URL + ANTHROPIC_API_KEY (via VERIDIAN_ENV_FILE)."
     });
   }
 
@@ -579,6 +580,9 @@ app.post("/api/ask", async (req, res) => {
   catch (e: any) { res.status(500).json({ error: e?.message || String(e) }); }
 });
 app.get("/api/ask/history", (req, res) => res.json(askHistory()));
+
+// AI diagnostics (sanitized — no secrets, no prompts, no responses).
+app.get("/api/ai/diag", async (req, res) => res.json(await validateProvider()));
 
 // 4k-iv. Screenshots context.
 app.get("/api/screenshots", (req, res) => res.json(shots.listShots()));
