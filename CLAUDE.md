@@ -21,7 +21,7 @@ Server restart is required for any change to `server.ts` / `vite.config.ts` / fi
 - `telemetry/persist.ts` — rolling `live-telemetry` session in `workspace-sessions.json` (deduped timeline, cap 60).
 - `telemetry/watcher.ts` — "waiting on you" sensor; scans Claude task logs under `%LOCALAPPDATA%\Temp\claude`, filters infra/build noise.
 - `telemetry/desktop-switch.ps1` — click-to-switch desktops via native Win+Ctrl+Arrow (delta from current registry index). No third-party exe.
-- `ai/providers.ts` — `chatJSON()`; provider = `claude` (local Claude Code CLI, **uses Max plan, no API cost** — `AI_PROVIDER=claude`), else `openai` (OPENAI_API_KEY), else `deepseek` (DEEPSEEK_API_KEY).
+- `ai/providers.ts` — `chatJSON()` via a **direct Anthropic-compatible HTTP endpoint ONLY** (`ANTHROPIC_BASE_URL`/`ANTHROPIC_API_KEY`/`ANTHROPIC_MODEL=claude-opus-4-8`, read at runtime, optionally via `VERIDIAN_ENV_FILE`). **No DeepSeek, OpenAI, Gemini, local-model fallbacks, Claude Code CLI, or headless Claude subprocesses.** Missing config ⇒ AI honestly disabled (no fallback, no fake heuristic posing as AI).
 - `autopilot/learn.ts` (`autopilot-learning.json`) — approval learning; an action type becomes "trusted" after 3 clean approvals.
 - `autopilot/desktop-briefs.ts` (`desktop-briefs.json`) — per-desktop "where I was + next step", saved on each summary, resurfaced on switch.
 - `autopilot/fleet.ts` (`fleet-projects.json`, `fleet-progress.json`) — **the autopilot fleet**: one headless Claude Code (Opus) session per project. Modes → Claude permission modes: `assess`→`plan` (read-only), `build`→`acceptEdits` (auto-edits, gates risky), `full`→`bypassPermissions` (unsupervised, opt-in only).

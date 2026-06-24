@@ -1,5 +1,7 @@
 # 02a — Anthropic Provider Validation (sanitized)
 
+> Veridian uses a direct Anthropic-compatible provider endpoint for intelligence. It does not use DeepSeek, OpenAI, Gemini, local-model fallbacks, Claude Code CLI, or headless Claude subprocesses. Historical test results were baseline findings and were revalidated against current runtime.
+
 ## Variable names detected (NO values shown)
 - `ANTHROPIC_BASE_URL` — present (via env / `VERIDIAN_ENV_FILE` = `C:\Users\HI\Desktop\env\.env`)
 - `ANTHROPIC_API_KEY` — present (local only; never displayed/committed)

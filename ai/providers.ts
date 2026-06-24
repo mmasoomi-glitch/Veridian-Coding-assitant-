@@ -1,5 +1,5 @@
-// Veridian AI provider — ANTHROPIC-COMPATIBLE ONLY.
-// No DeepSeek / OpenAI / Gemini / local-model / Claude-CLI fallback (remediation F-001).
+// Veridian AI provider — ANTHROPIC-COMPATIBLE HTTP ONLY.
+// No alternate-provider clients and no local-CLI/subprocess fallback (remediation F-001).
 // Config is read from process.env, or from a local env file pointed to by
 // VERIDIAN_ENV_FILE. Keys are never logged, returned, or committed.
 import fs from "node:fs";

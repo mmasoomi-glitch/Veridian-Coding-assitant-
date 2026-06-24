@@ -1,15 +1,14 @@
-// Autopilot Fleet: drives one headless Claude Code (Opus / Max plan) session per
-// desktop's active project. It assesses progress and advances each project, then
-// logs what it did — so you wake up to work moved forward.
+// Autopilot Fleet: per-project planning via the direct Anthropic-compatible
+// provider (Opus). PLAN-ONLY. The HTTP provider cannot execute file changes,
+// so BUILD/FULL are disabled (and were unsafe to ship anyway). No CLI shell-out.
 //
-// Modes map to Claude Code permission modes:
-//   assess -> "plan"            (read-only; plans, never changes anything)
-//   build  -> "acceptEdits"     (auto-applies file edits, gates risky commands)
-//   full   -> "bypassPermissions" (you opt into this per project; unsupervised)
+//   assess -> sends sanitized project metadata to the provider, returns a plan
+//   build/full -> DISABLED (honest), pending a separately-reviewed execution path
 
-import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { chatJSON, aiConfigured } from "../ai/providers";
+import { getGitStats } from "../telemetry/gitstats";
 
 const PROJECTS_FILE = path.join(process.cwd(), "fleet-projects.json");
 const PROGRESS_FILE = path.join(process.cwd(), "fleet-progress.json");
@@ -32,12 +31,6 @@ export interface ProgressEntry {
   durationMs: number;
 }
 
-const MODE_TO_PERM: Record<string, string> = {
-  assess: "plan",
-  build: "acceptEdits",
-  full: "bypassPermissions"
-};
-
 export function readProjects(): FleetProject[] {
   try { return JSON.parse(fs.readFileSync(PROJECTS_FILE, "utf8")); } catch { return []; }
 }
@@ -53,59 +46,33 @@ function appendProgress(e: ProgressEntry): void {
   try { fs.writeFileSync(PROGRESS_FILE, JSON.stringify(all.slice(0, 200), null, 2), "utf8"); } catch (err) { console.error("fleet progress write:", err); }
 }
 
-function parseClaudeResult(raw: string): string {
+// PLAN-ONLY assessment via the direct Anthropic-compatible provider.
+// Sends sanitized project METADATA only (name, goal, git stats) — never file
+// contents, clipboard, or secrets. BUILD/FULL are refused (no execution path).
+async function runProjectStep(project: FleetProject, mode: string): Promise<{ ok: boolean; summary: string; ms: number }> {
+  const start = Date.now();
+  if (mode !== "assess") {
+    return { ok: false, summary: "DISABLED — BUILD/FULL require a separately-reviewed execution path. The Anthropic HTTP provider plans only; it cannot modify files. Use ASSESS.", ms: 0 };
+  }
+  if (!aiConfigured()) {
+    return { ok: false, summary: "AI disabled — Anthropic provider not configured (set ANTHROPIC_BASE_URL/ANTHROPIC_API_KEY).", ms: 0 };
+  }
+  if (!project.path || !fs.existsSync(project.path)) {
+    return { ok: false, summary: `Project path not found: ${project.path}`, ms: Date.now() - start };
+  }
   try {
-    const p = JSON.parse(raw);
-    if (Array.isArray(p)) {
-      const r = [...p].reverse().find((m: any) => m.type === "result");
-      return String(r?.result || p[p.length - 1]?.result || "").slice(0, 2000);
-    }
-    return String(p.result || p.content || "").slice(0, 2000);
-  } catch {
-    return raw.slice(0, 2000);
+    const g: any = await getGitStats(project.path).catch(() => null);
+    const meta = g && g.isRepo
+      ? `git: branch ${g.currentBranch}, ${g.uncommitted} staged / ${g.unstaged} modified / ${g.untracked} untracked, ahead ${g.ahead} behind ${g.behind}, last commit "${g.lastCommit?.subject || "n/a"}" (${g.lastCommit?.relativeDate || ""})`
+      : "git: not a repository or unavailable";
+    const system = "You are an engineering planner. From the provided project METADATA ONLY (you are NOT given file contents), assess current state, the single highest-value next step, and any blockers. PLANS ONLY — do not claim to have changed anything. Under 150 words.";
+    const user = `Project: ${project.name}\nGoal: ${project.goal || "(infer from metadata)"}\n${meta}`;
+    const summary = await chatJSON({ system, user, json: false, maxTokens: 400 });
+    return { ok: true, summary: String(summary).slice(0, 2000), ms: Date.now() - start };
+  } catch (e: any) {
+    // Sanitized error category only.
+    return { ok: false, summary: `AI unavailable: ${String(e?.message || "error").replace(/anthropic_http_/, "http ")}`, ms: Date.now() - start };
   }
-}
-
-function buildPrompt(project: FleetProject, mode: string): string {
-  const base = `You are an autonomous engineering autopilot for the project "${project.name}" (folder: ${project.path}). Project goal: ${project.goal || "(no goal set — infer the most valuable objective from the codebase)"}.`;
-  if (mode === "assess") {
-    return `${base}\nDO NOT modify anything. Read the project and assess: (1) what is the current state/progress, (2) the single highest-value next step, (3) any blockers. Be concrete and concise (under 150 words).`;
-  }
-  if (mode === "build") {
-    return `${base}\nAdvance the project by ONE concrete, safe, reversible step toward the goal — edit files as needed. Do NOT run destructive commands (no deletes, force-push, deploys) and nothing outward-facing (no sending, publishing, payments). When done, summarize exactly what you changed and the next step (under 150 words).`;
-  }
-  return `${base}\nAdvance the project toward the goal autonomously, making the changes you judge necessary. When done, summarize what you did and what remains (under 150 words).`;
-}
-
-function runClaudeInProject(project: FleetProject, mode: string): Promise<{ ok: boolean; summary: string; ms: number }> {
-  return new Promise((resolve) => {
-    const start = Date.now();
-    if (!project.path || !fs.existsSync(project.path)) {
-      return resolve({ ok: false, summary: `Project path not found: ${project.path}`, ms: 0 });
-    }
-    const perm = MODE_TO_PERM[mode] || "plan";
-    const model = process.env.CLAUDE_MODEL || "opus";
-    const bin = process.env.CLAUDE_BIN || "claude";
-    const args = ["-p", "--output-format", "json", "--model", model, "--permission-mode", perm];
-    let out = "", err = "";
-    let child;
-    try {
-      child = spawn(bin, args, { cwd: project.path, shell: process.platform === "win32", windowsHide: true });
-    } catch (e: any) {
-      return resolve({ ok: false, summary: `spawn failed: ${e?.message || e}`, ms: Date.now() - start });
-    }
-    const timer = setTimeout(() => { try { child!.kill(); } catch { /* ignore */ } }, 15 * 60 * 1000);
-    child.stdout.on("data", (d) => (out += d));
-    child.stderr.on("data", (d) => (err += d));
-    child.on("error", (e) => { clearTimeout(timer); resolve({ ok: false, summary: `error: ${e.message}`, ms: Date.now() - start }); });
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      const summary = parseClaudeResult(out) || err.slice(0, 400) || `claude exited ${code}`;
-      resolve({ ok: code === 0, summary, ms: Date.now() - start });
-    });
-    child.stdin.write(buildPrompt(project, mode));
-    child.stdin.end();
-  });
 }
 
 let running = false;
@@ -129,7 +96,7 @@ export function startFleetRun(mode: string, onlyDesktop?: number): { started: bo
       for (const project of projects) {
         const m = mode || project.mode || "assess";
         appendProgress({ ts: new Date().toISOString(), project: project.name, desktop: project.desktop, mode: m, ok: true, summary: `▶ Starting (${m})…`, durationMs: 0 });
-        const r = await runClaudeInProject(project, m);
+        const r = await runProjectStep(project, m);
         appendProgress({ ts: new Date().toISOString(), project: project.name, desktop: project.desktop, mode: m, ok: r.ok, summary: r.summary, durationMs: r.ms });
       }
     } catch (e) {

@@ -312,7 +312,7 @@ export default function App() {
           currentProject: currentState.gitRepo || "—",
           focus: currentState.windowTitle
             ? `${currentState.activeApp}: ${currentState.windowTitle}`
-            : "Live telemetry only (AI brain offline — set CLAUDE_CODE_OAUTH_TOKEN)",
+            : "Local status summary — no AI provider used (configure ANTHROPIC_BASE_URL/ANTHROPIC_API_KEY).",
           completed: [],
           pending: mods.length ? [`Commit ${mods.length} modified file(s) in ${currentState.gitRepo || "workspace"}`] : [],
           risks: [
