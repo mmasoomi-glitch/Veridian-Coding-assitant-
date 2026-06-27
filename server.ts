@@ -62,9 +62,13 @@ function getCookie(req: any, name: string): string {
   return "";
 }
 app.use((req, res, next) => {
-  if (!totp.authRequired()) return next();
+  // Fail-closed (F-002): enforce auth on any network-exposed binding.
+  const bind = process.env.VERIDIAN_BIND || "127.0.0.1";
+  const isLoopback = ["127.0.0.1", "::1", "localhost", "::ffff:127.0.0.1"].includes(bind);
+  const localDev = process.env.VERIDIAN_LOCAL_DEV === "1";
+  const enforce = (!isLoopback || totp.authRequired()) && !(isLoopback && localDev);
+  if (!enforce) return next();
   const p = req.path;
-  // Allow auth endpoints + the SPA shell/static through; gate the data APIs.
   if (p.startsWith("/api/auth/") || !p.startsWith("/api/")) return next();
   if (totp.verifySessionToken(getCookie(req, "vsess"))) return next();
   return res.status(401).json({ error: "auth required" });
@@ -750,8 +754,9 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Veridian Server listening at http://localhost:${PORT}`);
+  const BIND = process.env.VERIDIAN_BIND || "127.0.0.1";
+  app.listen(PORT, BIND, () => {
+    console.log(`Veridian Server listening at http://${BIND}:${PORT} (set VERIDIAN_BIND=0.0.0.0 to expose; auth then required)`);
     console.log(`Database store allocated at: ${SESSION_DB_PATH}`);
     startTelemetryPoller();
     // Push this machine's state to the central command server (if CENTRAL_URL set).

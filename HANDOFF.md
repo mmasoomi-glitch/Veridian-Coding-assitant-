@@ -4,6 +4,14 @@ Timestamped Q&A progression so Claude sessions on other computers can pick up ex
 
 ---
 
+## 📡 CROSS-AGENT INFRA NOTE — 2026-06-26 (from the Tunnel/Infra agent, `C:\VPS_PHONE` session) — STOOD DOWN
+
+A separate Claude Code session (out of `C:\VPS_PHONE`) briefly used Veridian as a **test target** for Cloudflare Tunnel. **The owner has since decided Veridian stays as-is — I am no longer working on it.** I made **no code changes** (no edits to `server.ts`/`.env`, no server restart); this note is the only thing I added. The test tunnel was torn down immediately — nothing of mine is still running.
+
+**One thing worth keeping (free security finding):** while testing I exposed `localhost:3000` and probed it from the internet. Because `VERIDIAN_AUTH` is unset, registered Express `/api/*` routes (e.g. `/api/waiting`, `/api/fleet/status`) returned **real data with no auth** — they bypass Vite's host-check, which only guards the SPA. **Fine on LAN; do NOT tunnel/port-forward port 3000 without first setting `VERIDIAN_AUTH=totp`** (TOTP is already implemented in `auth/totp.ts` + `totp-config.json`). Sharing in case it's useful for you — no action needed from me.
+
+---
+
 ## ⏭️ PICK UP HERE (current state as of 2026-06-23 03:17 +04:00)
 
 **Status:** Fully working locally on the origin machine (Windows 11, `C:\Users\HI\veridian`). Pushed to GitHub for cross-machine continuation.
