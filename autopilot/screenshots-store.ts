@@ -13,6 +13,7 @@
 import fs from "fs";
 import path from "path";
 import { spawn } from "child_process";
+import { writeJsonAtomic } from "../lib/atomic";
 
 const FILE = path.join(process.cwd(), "screenshots-index.json");
 const SCRIPT = path.join(process.cwd(), "telemetry", "screenshot.ps1");
@@ -38,7 +39,7 @@ function read(): Shot[] {
 
 function write(shots: Shot[]): void {
   try {
-    fs.writeFileSync(FILE, JSON.stringify(shots, null, 2), "utf8");
+    writeJsonAtomic(FILE, shots);
   } catch (e) {
     console.error("screenshots-store write failed:", e);
   }

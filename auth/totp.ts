@@ -13,10 +13,59 @@
 import { authenticator } from "otplib";
 import * as QRCode from "qrcode";
 import crypto from "node:crypto";
+import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
+import { writeJsonAtomic } from "../lib/atomic";
 
 const CONFIG_PATH = path.join(process.cwd(), "totp-config.json");
+
+// ---------- at-rest encryption of the TOTP secret (F-003/F-029) ----------
+// The TOTP secret is the one piece of auth material that must stay reversible
+// (otplib needs the plaintext to verify codes), so it cannot just be hashed.
+// We encrypt it at rest with a key bound to this machine+user, so a stolen
+// totp-config.json is useless off the box. Decryption happens only in memory.
+// Recovery codes remain one-way hashed (see below) — never encrypted/stored raw.
+const ENC_PREFIX = "enc:v1:";
+
+function machineKey(): Buffer {
+  // A stable per-machine/user seed. AUTH_SESSION_SECRET (if set) further pins it.
+  const seed = [
+    os.hostname(),
+    os.userInfo().username,
+    process.platform,
+    process.arch,
+    process.env.AUTH_SESSION_SECRET || "veridian-totp-pepper"
+  ].join("|");
+  return crypto.createHash("sha256").update(seed, "utf8").digest(); // 32 bytes
+}
+
+function encryptSecret(plain: string): string {
+  try {
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv("aes-256-gcm", machineKey(), iv);
+    const enc = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    return ENC_PREFIX + Buffer.concat([iv, tag, enc]).toString("base64");
+  } catch {
+    return plain; // best-effort: never block auth setup
+  }
+}
+
+function decryptSecret(stored: string): string {
+  try {
+    if (!stored.startsWith(ENC_PREFIX)) return stored; // legacy plaintext
+    const buf = Buffer.from(stored.slice(ENC_PREFIX.length), "base64");
+    const iv = buf.subarray(0, 12);
+    const tag = buf.subarray(12, 28);
+    const enc = buf.subarray(28);
+    const decipher = crypto.createDecipheriv("aes-256-gcm", machineKey(), iv);
+    decipher.setAuthTag(tag);
+    return Buffer.concat([decipher.update(enc), decipher.final()]).toString("utf8");
+  } catch {
+    return ""; // tampered / wrong machine -> treat as not configured
+  }
+}
 
 interface TotpConfig {
   secret: string;
@@ -35,18 +84,29 @@ function readConfig(): TotpConfig | null {
     if (!fs.existsSync(CONFIG_PATH)) return null;
     const raw = fs.readFileSync(CONFIG_PATH, "utf8");
     const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed.secret === "string") return parsed as TotpConfig;
+    if (parsed && typeof parsed.secret === "string") {
+      // Decrypt the at-rest secret into the in-memory config (no-op for legacy plaintext).
+      parsed.secret = decryptSecret(parsed.secret);
+      // Transparently re-encrypt a legacy plaintext config on next write.
+      if (parsed.secret) needsReencrypt = !String(JSON.parse(raw).secret).startsWith(ENC_PREFIX);
+      return parsed as TotpConfig;
+    }
     return null;
   } catch {
     return null;
   }
 }
 
+// Set when we load a legacy plaintext secret, so the next writeConfig upgrades it.
+let needsReencrypt = false;
+
 function writeConfig(cfg: TotpConfig): void {
   try {
-    // Never persist the in-memory plaintext recovery cache.
-    const { _plainRecovery, ...persistable } = cfg;
-    fs.writeFileSync(CONFIG_PATH, JSON.stringify(persistable, null, 2), "utf8");
+    // Never persist the in-memory plaintext recovery cache; encrypt the secret at rest.
+    const { _plainRecovery, ...rest } = cfg;
+    const persistable = { ...rest, secret: rest.secret ? encryptSecret(rest.secret) : rest.secret };
+    writeJsonAtomic(CONFIG_PATH, persistable);
+    needsReencrypt = false;
   } catch {
     /* best-effort; do not throw */
   }
@@ -81,11 +141,14 @@ export function ensureConfig(): void {
   try {
     let cfg = loadConfig();
     if (cfg && cfg.secret) {
-      // Already configured. Backfill a sessionSecret if somehow missing.
+      // Already configured. Backfill a sessionSecret if somehow missing, and
+      // upgrade a legacy plaintext secret to encrypted-at-rest on first load.
       if (!cfg.sessionSecret) {
         cfg.sessionSecret =
           process.env.AUTH_SESSION_SECRET || crypto.randomBytes(32).toString("hex");
         writeConfig(cfg);
+      } else if (needsReencrypt) {
+        writeConfig(cfg); // re-persists with encryptSecret()
       }
       return;
     }

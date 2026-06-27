@@ -6,6 +6,7 @@
 
 import fs from "fs";
 import path from "path";
+import { writeJsonAtomic } from "../lib/atomic";
 
 const FILE = path.join(process.cwd(), "notebook.json");
 const FILES_DIR = path.join(process.cwd(), "notebook-files");
@@ -41,7 +42,7 @@ function read(): NoteEntry[] {
 
 function write(entries: NoteEntry[]): void {
   try {
-    fs.writeFileSync(FILE, JSON.stringify(entries, null, 2), "utf8");
+    writeJsonAtomic(FILE, entries);
   } catch (e) {
     console.error("notebook write failed:", e);
   }

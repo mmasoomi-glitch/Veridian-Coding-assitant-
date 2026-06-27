@@ -7,6 +7,7 @@
 
 import fs from "fs";
 import path from "path";
+import { writeJsonAtomic } from "../lib/atomic";
 
 const FILE = path.join(process.cwd(), "autopilot-learning.json");
 
@@ -30,7 +31,7 @@ function read(): Store {
 
 function write(s: Store): void {
   try {
-    fs.writeFileSync(FILE, JSON.stringify(s, null, 2), "utf8");
+    writeJsonAtomic(FILE, s);
   } catch (e) {
     console.error("autopilot learn write failed:", e);
   }

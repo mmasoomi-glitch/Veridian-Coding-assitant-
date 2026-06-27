@@ -2,26 +2,43 @@
 // values (max 20) so the owner can glance back at "what did I copy a minute ago?"
 // and restore any entry to the OS clipboard.
 //
-// PRIVACY: secrets (API keys, tokens, JWTs, long opaque blobs) are detected and
-// their preview is redacted to the first 4 chars. The raw value is kept on disk
-// ONLY locally (clip-history.json at process.cwd()) so restore() can work, but it
-// is NEVER returned by list() — callers (and the AI / UI) only see ClipEntry.
+// PRIVACY (F-003/F-029): secrets (API keys, tokens, JWTs, long opaque blobs) are
+// detected and never written to disk in plaintext. For a secret entry the raw
+// value is held ONLY in an ephemeral in-memory cache (cleared on server restart)
+// so restore() works during the session; on disk its value is blanked. Non-secret
+// clipboard text is still persisted so it survives a restart. clip-counts.json
+// stores a one-way hash as the dedup key — never the raw value. list()/topRepeats()/
+// suggest() return ClipEntry only (redacted preview), never the raw value.
 //
 // All file/spawn I/O is wrapped in try/catch; nothing here throws.
 
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 import { spawn } from "child_process";
+import { writeJsonAtomic } from "../lib/atomic";
 
 const FILE = path.join(process.cwd(), "clip-history.json");
 // Sibling file: persistent per-distinct-value counts across all history (survives
 // the rolling MAX cap, so "most used" reflects long-term frequency, not just the
-// last 20 entries). Keyed by raw value; each row keeps a redacted-safe preview.
+// last 20 entries). Keyed by a one-way hash of the value; each row keeps a
+// redacted-safe preview. The raw value is NEVER stored here.
 const COUNTS_FILE = path.join(process.cwd(), "clip-counts.json");
 const MAX = 20;
 
+// Ephemeral, in-process raw-value cache (id -> raw). Lets restore() return a
+// secret to the OS clipboard during the session without ever writing it to disk.
+// Lost on restart by design — a secret should not be restorable from a plaintext
+// file that outlives the session.
+const RAW_CACHE = new Map<string, string>();
+
+function keyOf(text: string): string {
+  // One-way dedup key. Not reversible -> safe to persist for secrets.
+  return crypto.createHash("sha256").update(text, "utf8").digest("hex");
+}
+
 interface CountRow {
-  value: string;     // raw value (used as the distinct key; restoreable id derived from it)
+  key: string;       // sha256(value) — distinct-value key; NOT the raw value
   preview: string;   // redacted-safe preview (secrets already masked)
   isSecret: boolean;
   length: number;
@@ -38,7 +55,8 @@ export interface ClipEntry {
   length: number;
 }
 
-// Internal record carries the raw value; never serialized out via list().
+// Internal record carries the raw value in memory; the on-disk form blanks the
+// value for secrets (see toDisk).
 interface ClipRecord extends ClipEntry {
   value: string;
 }
@@ -62,6 +80,13 @@ function makePreview(text: string, secret: boolean): string {
   return oneLine.slice(0, 80);
 }
 
+// On-disk shape of a record: secrets are stored with a blanked value so no raw
+// secret bytes ever touch clip-history.json. Non-secrets keep their value so they
+// can be restored after a restart.
+function toDisk(rec: ClipRecord): ClipRecord {
+  return rec.isSecret ? { ...rec, value: "" } : rec;
+}
+
 function read(): ClipRecord[] {
   try {
     const raw = JSON.parse(fs.readFileSync(FILE, "utf8"));
@@ -73,7 +98,7 @@ function read(): ClipRecord[] {
 
 function write(recs: ClipRecord[]): void {
   try {
-    fs.writeFileSync(FILE, JSON.stringify(recs, null, 2), "utf8");
+    writeJsonAtomic(FILE, recs.map(toDisk));
   } catch (e) {
     console.error("clip-history write failed:", e);
   }
@@ -82,7 +107,22 @@ function write(recs: ClipRecord[]): void {
 function readCounts(): CountRow[] {
   try {
     const raw = JSON.parse(fs.readFileSync(COUNTS_FILE, "utf8"));
-    return Array.isArray(raw) ? (raw as CountRow[]) : [];
+    if (!Array.isArray(raw)) return [];
+    // Tolerate legacy rows that used a raw `value` field: migrate to a hash key
+    // and drop the raw value so we never re-persist a plaintext secret.
+    return (raw as any[]).map((r) => {
+      if (r && typeof r.key === "string") return r as CountRow;
+      const legacyVal = typeof r?.value === "string" ? r.value : "";
+      return {
+        key: legacyVal ? keyOf(legacyVal) : keyOf(String(r?.id || Math.random())),
+        preview: String(r?.preview ?? ""),
+        isSecret: Boolean(r?.isSecret),
+        length: Number(r?.length ?? 0),
+        count: Number(r?.count ?? 1),
+        lastTs: String(r?.lastTs ?? ""),
+        id: String(r?.id ?? "")
+      } as CountRow;
+    });
   } catch {
     return [];
   }
@@ -90,19 +130,19 @@ function readCounts(): CountRow[] {
 
 function writeCounts(rows: CountRow[]): void {
   try {
-    fs.writeFileSync(COUNTS_FILE, JSON.stringify(rows, null, 2), "utf8");
+    writeJsonAtomic(COUNTS_FILE, rows);
   } catch (e) {
     console.error("clip-counts write failed:", e);
   }
 }
 
-// Increment the distinct-value count for a freshly recorded entry. Stores only a
-// redacted-safe preview so the counts file never widens secret exposure beyond
-// what clip-history.json already holds (raw value is needed there for restore).
+// Increment the distinct-value count for a freshly recorded entry. Dedup is by a
+// one-way hash of the raw value; only a redacted-safe preview is persisted.
 function bumpCount(rec: ClipRecord): void {
   try {
+    const k = keyOf(rec.value);
     const rows = readCounts();
-    const hit = rows.find((r) => r.value === rec.value);
+    const hit = rows.find((r) => r.key === k);
     if (hit) {
       hit.count += 1;
       hit.lastTs = rec.ts;
@@ -111,7 +151,7 @@ function bumpCount(rec: ClipRecord): void {
       hit.length = rec.length;
     } else {
       rows.push({
-        value: rec.value,
+        key: k,
         preview: rec.preview,
         isSecret: rec.isSecret,
         length: rec.length,
@@ -131,6 +171,12 @@ function toEntry(r: ClipRecord): ClipEntry {
   return { id: r.id, ts: r.ts, preview: r.preview, isSecret: r.isSecret, length: r.length };
 }
 
+// Resolve a record's raw value: ephemeral cache first (covers secrets recorded
+// this session), then the on-disk value (non-secrets only — secrets are blanked).
+function rawFor(rec: ClipRecord): string {
+  return RAW_CACHE.get(rec.id) || rec.value || "";
+}
+
 // Record a clipboard value: dedupe against the most recent entry, cap at MAX,
 // persist. Empty/whitespace-only text is ignored.
 export function record(text: string): void {
@@ -147,12 +193,15 @@ export function record(text: string): void {
       length: text.length,
       value: text
     };
+    // Keep the raw value in the ephemeral cache so restore works this session,
+    // even for secrets (which are blanked on disk).
+    RAW_CACHE.set(rec.id, text);
     // Frequency counting tracks every copy of a distinct value, including repeats
     // of the most-recent one (so "most used" stays accurate even when the history
     // list dedupes the visual entry below).
     bumpCount(rec);
     // Dedupe only when the new text equals the most recent entry's value.
-    if (recs.length > 0 && recs[0].value === text) return;
+    if (recs.length > 0 && rawFor(recs[0]) === text) return;
     const next = [rec, ...recs].slice(0, MAX);
     write(next);
   } catch (e) {
@@ -190,28 +239,28 @@ export function topRepeats(n = 5): ClipEntry[] {
   }
 }
 
-// Autocomplete: distinct entries whose raw value starts with (preferred) or
-// contains `prefix`, case-insensitive. Matching is done against the raw value so
-// secrets can still be found by what you typed, but the returned ClipEntry never
-// includes the raw value — only the redacted preview. Empty prefix → recent top.
+// Autocomplete: distinct entries whose raw value (when available this session, or
+// on disk for non-secrets) or preview starts with / contains `prefix`,
+// case-insensitive. The returned ClipEntry never includes the raw value — only
+// the redacted preview. Empty prefix → recent top.
 export function suggest(prefix: string, n = 8): ClipEntry[] {
   try {
     const q = String(prefix || "").trim().toLowerCase();
     const limit = Math.max(0, n);
-    // Distinct by raw value: prefer history (has ids + raw values) and fall back
-    // to count rows for values aged out of the rolling list.
     const seen = new Set<string>();
-    const pool: { value: string; entry: ClipEntry }[] = [];
+    const pool: { hay: string; entry: ClipEntry }[] = [];
     for (const r of read()) {
-      if (seen.has(r.value)) continue;
-      seen.add(r.value);
-      pool.push({ value: r.value, entry: toEntry(r) });
+      const k = keyOf(rawFor(r) || r.id);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      // Match against raw value when we have it this session, else the preview.
+      pool.push({ hay: (rawFor(r) || r.preview).toLowerCase(), entry: toEntry(r) });
     }
     for (const r of readCounts()) {
-      if (seen.has(r.value)) continue;
-      seen.add(r.value);
+      if (seen.has(r.key)) continue;
+      seen.add(r.key);
       pool.push({
-        value: r.value,
+        hay: r.preview.toLowerCase(),
         entry: { id: r.id, ts: r.lastTs, preview: r.preview, isSecret: r.isSecret, length: r.length }
       });
     }
@@ -219,9 +268,8 @@ export function suggest(prefix: string, n = 8): ClipEntry[] {
     const starts: ClipEntry[] = [];
     const contains: ClipEntry[] = [];
     for (const p of pool) {
-      const v = p.value.toLowerCase();
-      if (v.startsWith(q)) starts.push(p.entry);
-      else if (v.includes(q)) contains.push(p.entry);
+      if (p.hay.startsWith(q)) starts.push(p.entry);
+      else if (p.hay.includes(q)) contains.push(p.entry);
     }
     return [...starts, ...contains].slice(0, limit);
   } catch {
@@ -230,17 +278,17 @@ export function suggest(prefix: string, n = 8): ClipEntry[] {
 }
 
 // Restore an entry's raw value to the OS clipboard via PowerShell Set-Clipboard,
-// passing the value through stdin so it never lands on the command line.
+// passing the value through stdin so it never lands on the command line. Secrets
+// are restorable only during the session they were copied (ephemeral cache); a
+// secret aged out of the cache (e.g. after a restart) cannot be restored — by design.
 export function restore(id: string): Promise<boolean> {
   return new Promise((resolve) => {
     try {
-      // Look in the rolling history first; fall back to the counts file so a
-      // "most used"/autocomplete entry that has aged out of the last 20 can still
-      // be restored.
       const value =
-        read().find((r) => r.id === id)?.value ??
-        readCounts().find((r) => r.id === id)?.value;
-      if (value == null) return resolve(false);
+        RAW_CACHE.get(id) ||
+        read().find((r) => r.id === id && !r.isSecret)?.value ||
+        "";
+      if (!value) return resolve(false);
       const ps = spawn(
         "powershell",
         ["-NoProfile", "-Command", "$input | Set-Clipboard"],
@@ -260,6 +308,7 @@ export function restore(id: string): Promise<boolean> {
 // Wipe history (and the frequency counts that back "most used").
 export function clear(): void {
   try {
+    RAW_CACHE.clear();
     write([]);
     writeCounts([]);
   } catch (e) {

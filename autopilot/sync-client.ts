@@ -14,6 +14,7 @@
 
 import os from "node:os";
 import { setInterval } from "node:timers";
+import { sanitizeOutboundSnapshot } from "./sync-sanitize";
 
 /** True when CENTRAL_URL is configured and this instance should push state. */
 export function syncEnabled(): boolean {
@@ -37,10 +38,13 @@ export function startSyncClient(
   const push = async () => {
     try {
       const data = await collect();
+      // F-004: strip all sensitive fields before anything leaves this machine.
+      // Central only ever sees allowlisted, non-sensitive aggregation data.
+      const safe = sanitizeOutboundSnapshot(data);
       const body = {
         machineId: process.env.MACHINE_ID || os.hostname(),
         hostname: os.hostname(),
-        ...data,
+        ...safe,
       };
 
       const headers: Record<string, string> = { "Content-Type": "application/json" };

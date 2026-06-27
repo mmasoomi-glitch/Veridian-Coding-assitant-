@@ -11,6 +11,7 @@
 import fs from "fs";
 import path from "path";
 import { chatJSON } from "../ai/providers";
+import { writeJsonAtomic } from "../lib/atomic";
 
 const FILE = path.join(process.cwd(), "pdr-store.json");
 
@@ -43,7 +44,7 @@ function read(): Pdr[] {
 
 function write(list: Pdr[]): void {
   try {
-    fs.writeFileSync(FILE, JSON.stringify(list, null, 2), "utf8");
+    writeJsonAtomic(FILE, list);
   } catch (e) {
     console.error("pdr-store write failed:", e);
   }

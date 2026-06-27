@@ -4,6 +4,26 @@ Timestamped Q&A progression so Claude sessions on other computers can pick up ex
 
 ---
 
+## ✅ PRE-TEST RELEASE GATES — REMEDIATION PASS (2026-06-28, branch `fix/veridian-pretest-release-gates`)
+
+**Q: What changed?** Five audit gates closed; all type-check clean (`npx tsc --noEmit` → 0) with targeted tests. Full detail in `docs/remediation/REMEDIATION-STATUS.md`.
+
+- **F-002** fail-closed auth + loopback-default bind (`server.ts`). Exposed→401, loopback→200.
+- **F-012** AI-Ask secret scrubber — new `ai/context-sanitizer.ts`, wired into `autopilot/ai-ask.ts` before every LLM call. `tests/context-sanitizer.test.ts` (17 checks).
+- **F-003/F-029** secrets redacted at rest — clipboard secrets never hit disk (ephemeral in-mem cache for restore; `clip-counts.json` keyed by hash); terminal commands redacted before persist; TOTP secret AES-256-GCM encrypted at rest (machine-bound), legacy plaintext auto-upgraded. `tests/clip-secret-at-rest.test.ts`.
+- **F-004** local/cloud split — new `autopilot/sync-sanitize.ts` allowlist; outbound (`sync-client.ts`) + defensive inbound (`sync-store.ts`) scrub. `tests/sync-sanitize.test.ts` (15 checks).
+- **F-013/14/15** durable writes — new `lib/atomic.ts` `writeJsonAtomic()` (tmp+fsync+rename) applied to all 19 JSON store write sites. `tests/atomic.test.ts`.
+
+**Follow-up (non-blocking):** full `better-sqlite3`/WAL migration deferred (atomic writes remove the corruption vector without a native dep; native Windows build is risky unattended).
+
+**Model fix-loop:** F-002 and the F-012 draft were run through the cheap OpenRouter model (`deepseek/deepseek-chat`). F-012's cheap draft had a real URL-query token leak + over-rigid key anchors → escalated to Opus authorship. Scorecard: `docs/remediation/MODEL-SCORECARD.md`. **Owl Alpha** (free stealth) is blocked by the OpenRouter account privacy policy (no-train) — needs an owner toggle at openrouter.ai/settings/privacy; not changed.
+
+**Standalone skill:** the `veridian` OpenRouter helper is exported, dependency-free and Claude-independent, to `C:\Users\HI\Desktop\env\veridian-skill\` (`veridian-ask.mjs` + `.cmd`/`.sh` wrappers + README). Verified working.
+
+**Not done / next:** broaden route-level authz; consider SQLite migration; full manual acceptance test pass (`docs/preflight/06-...`).
+
+---
+
 ## 📡 CROSS-AGENT INFRA NOTE — 2026-06-26 (from the Tunnel/Infra agent, `C:\VPS_PHONE` session) — STOOD DOWN
 
 A separate Claude Code session (out of `C:\VPS_PHONE`) briefly used Veridian as a **test target** for Cloudflare Tunnel. **The owner has since decided Veridian stays as-is — I am no longer working on it.** I made **no code changes** (no edits to `server.ts`/`.env`, no server restart); this note is the only thing I added. The test tunnel was torn down immediately — nothing of mine is still running.

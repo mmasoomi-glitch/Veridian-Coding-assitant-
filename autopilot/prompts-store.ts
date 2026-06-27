@@ -7,6 +7,7 @@
 
 import fs from "fs";
 import path from "path";
+import { writeJsonAtomic } from "../lib/atomic";
 
 const FILE = path.join(process.cwd(), "prompts.json");
 
@@ -78,7 +79,7 @@ function read(): PromptItem[] {
 
 function write(items: PromptItem[]): void {
   try {
-    fs.writeFileSync(FILE, JSON.stringify(items, null, 2), "utf8");
+    writeJsonAtomic(FILE, items);
   } catch (e) {
     console.error("prompts write failed:", e);
   }

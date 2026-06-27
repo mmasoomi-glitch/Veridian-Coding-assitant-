@@ -2,6 +2,7 @@
 // and keeps timestamped snapshots so text survives a keyboard wipe.
 import fs from "fs";
 import path from "path";
+import { writeJsonAtomic } from "../lib/atomic";
 
 const FILE = path.join(process.cwd(), "scratch-buffer.json");
 const MAX_SNAPSHOTS = 30;
@@ -26,7 +27,7 @@ function read(): ScratchState {
 }
 
 function write(s: ScratchState): void {
-  try { fs.writeFileSync(FILE, JSON.stringify(s, null, 2), "utf8"); } catch (e) { console.error("scratch write:", e); }
+  try { writeJsonAtomic(FILE, s); } catch (e) { console.error("scratch write:", e); }
 }
 
 export function getScratch(): ScratchState {

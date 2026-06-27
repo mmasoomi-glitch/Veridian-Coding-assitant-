@@ -11,6 +11,7 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { writeJsonAtomic } from "../lib/atomic";
 
 // --- Config (env-overridable) -----------------------------------------------
 
@@ -117,7 +118,7 @@ function readLog(): BackupRecord[] {
 function appendLog(rec: BackupRecord): void {
   const all = readLog();
   all.unshift(rec);
-  try { fs.writeFileSync(LOG_FILE, JSON.stringify(all.slice(0, 500), null, 2), "utf8"); } catch (e) { console.error("backup log write:", e); }
+  try { writeJsonAtomic(LOG_FILE, all.slice(0, 500)); } catch (e) { console.error("backup log write:", e); }
 }
 
 // --- Public API --------------------------------------------------------------

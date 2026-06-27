@@ -12,6 +12,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { writeJsonAtomic } from "../lib/atomic";
 
 const METRICS_FILE = path.join(process.cwd(), "keystroke-metrics.json");
 const NUDGE_FILE = path.join(process.cwd(), "burnout-nudge.json");
@@ -179,7 +180,7 @@ function readLastNudge(): number {
 
 function writeLastNudge(ts: string): void {
   try {
-    fs.writeFileSync(NUDGE_FILE, JSON.stringify({ lastNudge: ts }, null, 2), "utf8");
+    writeJsonAtomic(NUDGE_FILE, { lastNudge: ts });
   } catch {
     /* never throw */
   }

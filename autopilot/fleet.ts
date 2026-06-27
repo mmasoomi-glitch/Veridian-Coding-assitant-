@@ -9,6 +9,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { chatJSON, aiConfigured } from "../ai/providers";
 import { getGitStats } from "../telemetry/gitstats";
+import { writeJsonAtomic } from "../lib/atomic";
 
 const PROJECTS_FILE = path.join(process.cwd(), "fleet-projects.json");
 const PROGRESS_FILE = path.join(process.cwd(), "fleet-progress.json");
@@ -35,7 +36,7 @@ export function readProjects(): FleetProject[] {
   try { return JSON.parse(fs.readFileSync(PROJECTS_FILE, "utf8")); } catch { return []; }
 }
 export function writeProjects(p: FleetProject[]): void {
-  fs.writeFileSync(PROJECTS_FILE, JSON.stringify(p, null, 2), "utf8");
+  writeJsonAtomic(PROJECTS_FILE, p);
 }
 export function readProgress(): ProgressEntry[] {
   try { return JSON.parse(fs.readFileSync(PROGRESS_FILE, "utf8")); } catch { return []; }
@@ -43,7 +44,7 @@ export function readProgress(): ProgressEntry[] {
 function appendProgress(e: ProgressEntry): void {
   const all = readProgress();
   all.unshift(e);
-  try { fs.writeFileSync(PROGRESS_FILE, JSON.stringify(all.slice(0, 200), null, 2), "utf8"); } catch (err) { console.error("fleet progress write:", err); }
+  try { writeJsonAtomic(PROGRESS_FILE, all.slice(0, 200)); } catch (err) { console.error("fleet progress write:", err); }
 }
 
 // PLAN-ONLY assessment via the direct Anthropic-compatible provider.

@@ -11,6 +11,8 @@
 
 import fs from "fs";
 import path from "path";
+import { sanitizeOutboundSnapshot, payloadHasForbiddenFields } from "./sync-sanitize";
+import { writeJsonAtomic } from "../lib/atomic";
 
 const FILE = path.join(process.cwd(), "sync-machines.json");
 
@@ -39,7 +41,7 @@ function read(): Store {
 
 function write(s: Store): void {
   try {
-    fs.writeFileSync(FILE, JSON.stringify(s, null, 2), "utf8");
+    writeJsonAtomic(FILE, s);
   } catch (e) {
     console.error("sync-store write failed:", e);
   }
@@ -58,6 +60,17 @@ export function recordMachine(payload: {
 }): void {
   try {
     if (!payload || !payload.machineId) return;
+
+    // F-004 defense-in-depth: even if a stale/misconfigured local agent sends
+    // sensitive fields, the central store re-sanitizes through the same allowlist
+    // so raw clipboard/paths/commands/URLs can never be persisted here.
+    if (payloadHasForbiddenFields(payload)) {
+      console.warn(
+        `sync-store: dropped forbidden sensitive field(s) from ${payload.machineId} (central stores allowlisted aggregation only)`
+      );
+    }
+    const safe = sanitizeOutboundSnapshot(payload);
+
     const now = new Date().toISOString();
     const store = read();
     const prev = store[payload.machineId];
@@ -66,9 +79,9 @@ export function recordMachine(payload: {
       machineId: payload.machineId,
       hostname: payload.hostname || prev?.hostname || payload.machineId,
       lastSeen: now,
-      currentState: payload.currentState ?? prev?.currentState ?? {},
-      sessions: Array.isArray(payload.sessions) ? payload.sessions : prev?.sessions ?? [],
-      waiting: Array.isArray(payload.waiting) ? payload.waiting : prev?.waiting ?? [],
+      currentState: safe.currentState ?? prev?.currentState ?? {},
+      sessions: Array.isArray(safe.sessions) ? safe.sessions : prev?.sessions ?? [],
+      waiting: Array.isArray(safe.waiting) ? safe.waiting : prev?.waiting ?? [],
       ts: now,
     };
 

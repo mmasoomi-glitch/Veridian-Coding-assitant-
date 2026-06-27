@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { writeJsonAtomic } from "../lib/atomic";
 
 // --- Data shapes (compatible with src/types.ts, server-side plain objects) ---
 
@@ -48,7 +49,7 @@ function readStore(): SessionHistory[] {
 }
 
 function writeStore(sessions: SessionHistory[]): void {
-  fs.writeFileSync(STORE_PATH, JSON.stringify(sessions, null, 2), "utf-8");
+  writeJsonAtomic(STORE_PATH, sessions);
 }
 
 function makeLiveSession(): SessionHistory {

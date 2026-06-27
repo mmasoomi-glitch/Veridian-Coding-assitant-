@@ -23,10 +23,26 @@ Veridian is a **single-owner, Windows-first "workspace memory + command center."
 - Must compile (`npx tsc --noEmit`) and not break existing routes/SPA serving.
 
 ## Model-loop policy (how fixes are produced)
-1. Draft with the **cheap** model (`deepseek/deepseek-chat`).
-2. Apply → verify (`tsc` + targeted runtime check). **If it passes, move forward — do not re-prompt the same model.**
-3. If it fails verification, **escalate** the model (deepseek → `qwen/qwen3-coder` → `anthropic/claude-sonnet-4`), one attempt each, then stop and report.
-4. A human/Claude reviews before the disk write; nothing auto-commits.
+Escalation chain (cheapest/most-experimental first → strongest last). One attempt
+each; on verification failure, escalate to the next model:
+
+0. **`openrouter/owl-alpha`** — FREE, ~1M ctx, agentic/code-tuned stealth model.
+   First-stage drafter. Owner wants its raw output surfaced for evaluation.
+1. `deepseek/deepseek-chat` — cheap, proven.
+2. `qwen/qwen3-coder` — code-specialist fallback.
+3. `anthropic/claude-sonnet-4` — strong final fallback.
+
+Procedure:
+1. Brief the model with this file's context + a tight per-issue prompt.
+2. Draft with the current stage's model. **Surface Owl Alpha's raw output** to the
+   owner when it is the drafter (free + under evaluation).
+3. Apply → verify (`tsc` + targeted runtime check). **If it passes, move forward —
+   do not re-prompt the same model.**
+4. If it fails verification, **escalate** to the next model in the chain, one
+   attempt each, then stop and report.
+5. A human/Claude reviews before the disk write; nothing auto-commits.
+6. Log each attempt to `docs/remediation/MODEL-SCORECARD.md`
+   (model · issue · speed · accuracy · quality · verdict).
 
 ## CURRENT TARGET ISSUE — F-002: fail-open auth + non-loopback bind
 `server.ts` binds the server to `0.0.0.0` (all interfaces) and its auth middleware only enforces TOTP when `VERIDIAN_AUTH=totp` is set — otherwise **every `/api/*` route is reachable unauthenticated on the LAN** (clipboard, keylog, screenshots, telemetry, launch).

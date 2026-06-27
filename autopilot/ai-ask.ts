@@ -14,6 +14,8 @@
 import fs from "fs";
 import path from "path";
 import { chatJSON } from "../ai/providers";
+import { sanitizeContextForLLM } from "../ai/context-sanitizer";
+import { writeJsonAtomic } from "../lib/atomic";
 
 const HISTORY_FILE = path.join(process.cwd(), "ask-history.json");
 const MAX_HISTORY = 50;
@@ -195,7 +197,7 @@ export function askHistory(): AskEntry[] {
 function appendHistory(entry: AskEntry): void {
   try {
     const next = [entry, ...askHistory()].slice(0, MAX_HISTORY);
-    fs.writeFileSync(HISTORY_FILE, JSON.stringify(next, null, 2), "utf8");
+    writeJsonAtomic(HISTORY_FILE, next);
   } catch (e) {
     console.error("ask-history write failed:", e);
   }
@@ -215,11 +217,18 @@ export async function ask(question: string): Promise<{ answer: string; usedConte
 
   const { context, usedContext } = gatherContext();
 
+  // F-012: scrub secrets/tokens/private paths out of the context before it ever
+  // leaves the device. Raw clipboard/command/URL/key material must not reach the LLM.
+  const { sanitized, redactedCount } = sanitizeContextForLLM(context);
+  if (redactedCount > 0) {
+    console.log(`[ai-ask] sanitized context: redacted ${redactedCount} secret-like span(s) before LLM send`);
+  }
+
   let answer: string;
   try {
     const result = await chatJSON({
       system: SYSTEM_PROMPT,
-      user: "CONTEXT:\n" + (context || "(no local context available)") + "\n\nQUESTION: " + q,
+      user: "CONTEXT:\n" + (sanitized || "(no local context available)") + "\n\nQUESTION: " + q,
       json: false
     });
     answer = str(result).trim();

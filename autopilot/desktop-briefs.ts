@@ -4,6 +4,7 @@
 
 import fs from "fs";
 import path from "path";
+import { writeJsonAtomic } from "../lib/atomic";
 
 const FILE = path.join(process.cwd(), "desktop-briefs.json");
 
@@ -25,7 +26,7 @@ function read(): Record<string, DesktopBrief> {
 
 function write(d: Record<string, DesktopBrief>): void {
   try {
-    fs.writeFileSync(FILE, JSON.stringify(d, null, 2), "utf8");
+    writeJsonAtomic(FILE, d);
   } catch (e) {
     console.error("desktop-briefs write failed:", e);
   }

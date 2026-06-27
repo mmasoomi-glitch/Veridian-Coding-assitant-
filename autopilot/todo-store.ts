@@ -7,6 +7,7 @@
 
 import fs from "fs";
 import path from "path";
+import { writeJsonAtomic } from "../lib/atomic";
 
 const FILE = path.join(process.cwd(), "todos.json");
 
@@ -44,7 +45,7 @@ function read(): Todo[] {
 
 function write(todos: Todo[]): void {
   try {
-    fs.writeFileSync(FILE, JSON.stringify(todos, null, 2), "utf8");
+    writeJsonAtomic(FILE, todos);
   } catch (e) {
     console.error("todo-store write failed:", e);
   }

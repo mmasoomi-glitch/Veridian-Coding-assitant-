@@ -26,6 +26,7 @@ import * as shots from "./autopilot/screenshots-store";
 import * as todos from "./autopilot/todo-store";
 import { assess as assessBurnout } from "./autopilot/burnout-store";
 import * as keylog from "./autopilot/keylog-store";
+import { writeJsonAtomic } from "./lib/atomic";
 import os from "os";
 
 dotenv.config();
@@ -112,7 +113,7 @@ function readSessionDb() {
 // Helper to write database
 function writeSessionDb(data: any) {
   try {
-    fs.writeFileSync(SESSION_DB_PATH, JSON.stringify(data, null, 2), "utf8");
+    writeJsonAtomic(SESSION_DB_PATH, data);
     return true;
   } catch (error) {
     console.error("Error writing session database:", error);
@@ -255,13 +256,16 @@ function shapeTelemetry(t: any) {
   }
   if (Array.isArray(t.recentCommands)) {
     t.recentCommands.slice(-5).forEach((cmd: string, i: number) => {
+      // F-003/029: a shell command may embed a key/token (e.g. `deploy --token=…`).
+      // Redact before it lands in the persisted timeline / AI context.
+      const red = redactSecret(String(cmd || ""));
       timeline.push({
         id: `tele-cmd-${i}`,
         timestamp: ts,
         type: "terminal",
         title: "Terminal command",
-        details: cmd,
-        important: false
+        details: red.value,
+        important: red.isSecret
       });
     });
   }
