@@ -1,4 +1,4 @@
-// AI provider remediation tests (TC-AI-04/05/06). Run: npm run test:ai
+// AI provider tests (TC-AI-04/05/06). Run: npm run test:ai
 // No real provider call, no secret, no quota use.
 import assert from "node:assert";
 import fs from "node:fs";
@@ -10,50 +10,46 @@ async function t(name: string, fn: () => void | Promise<void>) {
   catch (e: any) { fail++; console.log(`  FAIL  ${name}\n        ${e?.message || e}`); }
 }
 
+const PROVIDER_ENV = ["VERIDIAN_ENV", "OPENROUTER_API_KEY", "OPENROUTER_MODEL", "OPENROUTER_BASE_URL", "ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY", "ANTHROPIC_MODEL"];
+function snapshotEnv() { const s: Record<string, string | undefined> = {}; for (const k of [...PROVIDER_ENV, "VERIDIAN_ENV_FILE"]) s[k] = process.env[k]; return s; }
+function restoreEnv(s: Record<string, string | undefined>) { for (const k of Object.keys(s)) { if (s[k] === undefined) delete process.env[k]; else process.env[k] = s[k]!; } }
+function clearProviders() { for (const k of PROVIDER_ENV) delete process.env[k]; process.env.VERIDIAN_ENV_FILE = path.join(process.cwd(), "tests", "__no_such_env__.env"); }
+
 (async () => {
-  // Fresh import so config is read against our manipulated env.
   const providers = await import("../ai/providers.ts");
 
-  // TC-AI-04: no DeepSeek/OpenAI/Gemini/CLI path exists in the provider source.
-  await t("TC-AI-04 no forbidden provider/CLI paths in ai/providers.ts", () => {
+  // TC-AI-04: no CLI/subprocess AI path in ai/providers.ts (HTTP only).
+  await t("TC-AI-04 no CLI/subprocess path in ai/providers.ts", () => {
     const src = fs.readFileSync(path.join(process.cwd(), "ai", "providers.ts"), "utf8");
-    for (const bad of [/deepseek/i, /openai/i, /gemini/i, /child_process/i, /\bspawn\b/i, /claude\s+-p/i, /CLAUDE_BIN/i, /CLAUDE_CODE_OAUTH/i, /--resume/i]) {
-      assert.ok(!bad.test(src), `forbidden token present: ${bad}`);
+    for (const bad of [/child_process/i, /\bspawn\(/i, /\bexecFile\(/i, /claude\s+-p/i, /CLAUDE_BIN/i, /CLAUDE_CODE_OAUTH/i, /--resume/i]) {
+      assert.ok(!bad.test(src), `forbidden CLI token present: ${bad}`);
     }
   });
 
-  // TC-AI-05: missing config => AI disabled, no fallback, chatJSON rejects honestly.
+  // TC-AI-05: no provider config => AI disabled, no fallback, chatJSON rejects honestly.
   await t("TC-AI-05 missing config disables AI (no fallback)", async () => {
-    const save = { b: process.env.ANTHROPIC_BASE_URL, k: process.env.ANTHROPIC_API_KEY, f: process.env.VERIDIAN_ENV_FILE };
-    delete process.env.ANTHROPIC_BASE_URL; delete process.env.ANTHROPIC_API_KEY;
-    process.env.VERIDIAN_ENV_FILE = path.join(process.cwd(), "tests", "__no_such_env__.env");
+    const save = snapshotEnv();
+    clearProviders();
     try {
       assert.strictEqual(providers.aiConfigured(), false, "should be unconfigured");
       assert.strictEqual(providers.activeProvider(), null, "no provider when unconfigured");
       await assert.rejects(() => providers.chatJSON({ system: "x", user: "y" }), /not configured/i);
-    } finally {
-      if (save.b) process.env.ANTHROPIC_BASE_URL = save.b; else delete process.env.ANTHROPIC_BASE_URL;
-      if (save.k) process.env.ANTHROPIC_API_KEY = save.k; else delete process.env.ANTHROPIC_API_KEY;
-      if (save.f) process.env.VERIDIAN_ENV_FILE = save.f; else delete process.env.VERIDIAN_ENV_FILE;
-    }
+    } finally { restoreEnv(save); }
   });
 
-  // TC-AI-06: provider failure returns a sanitized unavailable state, not a fabricated answer.
+  // TC-AI-06: provider failure returns a sanitized unavailable state, not a fabrication.
   await t("TC-AI-06 unreachable provider => sanitized unavailable (no fabrication)", async () => {
-    const save = { b: process.env.ANTHROPIC_BASE_URL, k: process.env.ANTHROPIC_API_KEY, f: process.env.VERIDIAN_ENV_FILE };
-    delete process.env.VERIDIAN_ENV_FILE;
-    process.env.ANTHROPIC_BASE_URL = "http://127.0.0.1:9"; // closed port
-    process.env.ANTHROPIC_API_KEY = "test-not-a-real-key";
+    const save = snapshotEnv();
+    clearProviders();
+    // configure ONLY a bogus OpenRouter endpoint (closed port) so the probe fails fast
+    process.env.VERIDIAN_ENV = "test-not-a-real-key";
+    process.env.OPENROUTER_BASE_URL = "http://127.0.0.1:9";
     try {
       const v = await providers.validateProvider();
       assert.strictEqual(v.configured, true);
       assert.strictEqual(v.modelAccepted, false, "must not claim model accepted on failure");
-      assert.ok(v.errorCategory && v.errorCategory !== null, "must report an error category, not a fake answer");
-    } finally {
-      if (save.b) process.env.ANTHROPIC_BASE_URL = save.b; else delete process.env.ANTHROPIC_BASE_URL;
-      if (save.k) process.env.ANTHROPIC_API_KEY = save.k; else delete process.env.ANTHROPIC_API_KEY;
-      if (save.f) process.env.VERIDIAN_ENV_FILE = save.f; else delete process.env.VERIDIAN_ENV_FILE;
-    }
+      assert.ok(v.errorCategory, "must report an error category, not a fake answer");
+    } finally { restoreEnv(save); }
   });
 
   console.log(`\nAI provider tests: ${pass} passed, ${fail} failed`);
