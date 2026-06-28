@@ -50,6 +50,10 @@ const ok = (n: string, c: boolean) => { console.log((c ? "  ok   " : "  FAIL ") 
   ok("uri user:pass@host caught", L("postgresql://user:" + "Zx9q7Wv2kP" + "@localhost:5432/db") === true);
   ok("slack token caught", L("xox" + "b-123456789012-abcdefABCDEF1234") === true);
   ok("stripe key caught", L("sk_" + "live_" + "z".repeat(24)) === true);
+  // R04b CRITICAL: newline-split secret must now be caught...
+  ok("newline-split AWS secret caught", L("wJalr" + "XUtnFEMI/K7MDENG" + "\n" + "/bPxRfiCY" + "EXAMPLEKEY") === true);
+  // ...without flagging ordinary multi-line prose (spaces keep contiguity broken).
+  ok("multi-line prose NOT flagged", L("the quick brown fox\njumped over the lazy dog near the river") === false);
   // Still-caught originals:
   ok("openrouter key still caught", L("sk-" + "or-v1-" + "z".repeat(40)) === true);
   ok("jwt still caught", L("eyJ" + "hbGci.eyJzdWIiOiIx.SflKxwRJ") === true);

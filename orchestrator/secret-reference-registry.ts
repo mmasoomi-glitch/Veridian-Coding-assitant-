@@ -102,6 +102,16 @@ export function looksLikeSecret(s: unknown): boolean {
   // Long hex blob (>=32) — keys, hashes used as live secrets
   if (/\b[a-fA-F0-9]{32,}\b/.test(v)) return true;
 
+  // Newline-split evasion (R04b CRITICAL): a value broken across lines (e.g. an SSH/AWS
+  // key with embedded \n) defeats the contiguous-run checks above. Re-test with newlines
+  // removed. Spaces are NOT removed, so ordinary multi-line prose (space-separated short
+  // words) still has no 32-char contiguous run and is not flagged.
+  const joined = v.replace(/[\r\n]+/g, "");
+  if (joined !== v) {
+    if (/[A-Za-z0-9+/=_-]{32,}/.test(joined) && !looksLikePath(joined)) return true;
+    if (/\b[a-fA-F0-9]{32,}\b/.test(joined)) return true;
+  }
+
   return false;
 }
 
