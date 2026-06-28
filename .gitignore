@@ -64,3 +64,14 @@ secret-references.json
 devices.json
 # raw model output may echo secret-shaped examples — keep local, commit metadata+hash only
 docs/program-control/ai-evidence/**/*openrouter*.md
+# root-level scratch .ts (reviewer/agent scratch) — real code lives in src/ tests/ orchestrator/ etc.
+/adversarial-test.ts
+/analyze-findings.ts
+/detailed-test.ts
+/final-verdict.ts
+/newline-bypass-test.ts
+/path-check.ts
+/real-adversarial.ts
+/recheck-whitespace.ts
+/trim-analysis.ts
+/whitespace-test.ts
