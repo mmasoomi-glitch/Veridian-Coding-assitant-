@@ -22,6 +22,7 @@ import { recordClipBlobs, listClipBlobs } from "./autopilot/clip-sync-store";
 import { startSyncClient, startClipSyncClient } from "./autopilot/sync-client";
 import { saveScratch, getScratch } from "./autopilot/scratch-store";
 import * as totp from "./auth/totp";
+import * as vault from "./auth/vault";
 import { ask, askHistory } from "./autopilot/ai-ask";
 import * as shots from "./autopilot/screenshots-store";
 import * as todos from "./autopilot/todo-store";
@@ -75,24 +76,60 @@ app.use((req, res, next) => {
   if (totp.verifySessionToken(getCookie(req, "vsess"))) return next();
   return res.status(401).json({ error: "auth required" });
 });
-app.get("/api/auth/status", (req, res) => res.json({
-  required: totp.authRequired(),
-  authed: totp.verifySessionToken(getCookie(req, "vsess")),
-  configured: totp.isConfigured()
-}));
-app.post("/api/auth/login", (req, res) => {
-  const { code, recovery } = req.body || {};
-  const ok = recovery ? totp.verifyRecovery(String(recovery)) : totp.verifyCode(String(code || ""));
-  if (!ok) return res.status(401).json({ ok: false, error: "invalid code" });
+function isLocalReq(req: any): boolean {
+  return ["localhost", "127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.hostname) || String(req.ip || "").includes("127.0.0.1");
+}
+function setSessionCookie(req: any, res: any): void {
   const secure = req.headers["x-forwarded-proto"] === "https" ? "; Secure" : "";
   res.setHeader("Set-Cookie", `vsess=${encodeURIComponent(totp.createSessionToken())}; HttpOnly; Path=/; Max-Age=604800; SameSite=Lax${secure}`);
+}
+
+app.get("/api/auth/status", (req, res) => {
+  const lock = totp.lockState();
+  res.json({
+    required: totp.authRequired(),
+    authed: totp.verifySessionToken(getCookie(req, "vsess")),
+    configured: totp.isConfigured(),
+    needsSetup: !totp.isConfigured(),
+    sealing: vault.sealingMethod(),         // "dpapi" | "machine" | "none"
+    locked: lock.locked,
+    lockedMs: lock.retryInMs
+  });
+});
+
+// First-run: create the strong login (master passphrase + TOTP). Local-only so a
+// network-exposed instance can't be claimed by a stranger. Returns QR + one-time
+// recovery codes. Refuses if already configured (use change-passphrase instead).
+app.post("/api/auth/setup", async (req, res) => {
+  try {
+    if (totp.isConfigured()) return res.status(403).json({ error: "already configured" });
+    if (!isLocalReq(req)) return res.status(403).json({ error: "setup must be performed locally" });
+    const { passphrase, syncKey } = req.body || {};
+    if (!passphrase || String(passphrase).length < 8) return res.status(400).json({ error: "passphrase must be at least 8 characters" });
+    const info = await totp.setupVault(String(passphrase), syncKey ? String(syncKey) : undefined);
+    if (syncKey) process.env.VERIDIAN_SYNC_KEY = String(syncKey);
+    setSessionCookie(req, res); // log the owner in right after setup
+    res.json({ ok: true, ...info });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || String(e) });
+  }
+});
+
+// 2FA login: master passphrase + TOTP code (or a recovery code). Rate-limited.
+app.post("/api/auth/login", async (req, res) => {
+  const { passphrase, code, recovery } = req.body || {};
+  const result = await totp.login(String(passphrase || ""), String(code || ""), recovery ? String(recovery) : undefined);
+  if (!result.ok) {
+    return res.status(result.error === "locked" ? 429 : 401).json({
+      ok: false,
+      error: result.error === "locked" ? "too many attempts — locked" : "invalid passphrase or code",
+      lockedMs: result.lockedMs
+    });
+  }
+  setSessionCookie(req, res);
   res.json({ ok: true });
 });
-app.get("/api/auth/setup", async (req, res) => {
-  const local = ["localhost", "127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.hostname) || String(req.ip || "").includes("127.0.0.1");
-  if (!local && totp.isConfigured()) return res.status(403).json({ error: "setup locked" });
-  res.json(await totp.getSetupInfo());
-});
+
 app.post("/api/auth/logout", (req, res) => {
   res.setHeader("Set-Cookie", "vsess=; HttpOnly; Path=/; Max-Age=0");
   res.json({ ok: true });
@@ -756,6 +793,21 @@ app.post("/api/elevenlabs/tts", async (req, res) => {
 // --- EXPOSE VITE OR STATIC FILES ---
 
 async function startServer() {
+  // Unseal the DPAPI-sealed credential vault into memory (Windows-bound). When a
+  // vault exists, this loads the TOTP/session secrets and the shared cross-device
+  // sync key — set it into the environment so clipboard sync "just works" without
+  // the owner re-entering a key each launch (Chrome-style: sealed once, auto-loaded).
+  if (vault.isInitialized()) {
+    const ok = await vault.unseal();
+    if (ok) {
+      const sk = vault.getSyncKey();
+      if (sk && !process.env.VERIDIAN_SYNC_KEY) process.env.VERIDIAN_SYNC_KEY = sk;
+      console.log(`Veridian vault unsealed (${vault.sealingMethod()}). Strong login active.`);
+    } else {
+      console.error("Veridian vault present but could NOT be unsealed (different Windows user/machine?). Login will fail until restored.");
+    }
+  }
+
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
