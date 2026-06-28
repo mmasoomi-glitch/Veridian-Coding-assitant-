@@ -14,15 +14,18 @@ on any breaking change. No endpoint is "live for Android" until it appears here 
 - `GET /api/admin/users` · `POST /api/admin/users` · `DELETE /api/admin/users/:email` (admin)
 - `GET /api/admin/team` → `{ owner, members, total, solo }`
 
-## Orchestrator contracts (to be published as packages land)
-- `GET /api/orch/health` (D46) — DRAFT
-- `GET /api/orch/repos` (D21) — DRAFT
-- `GET /api/orch/risk` (D24) — DRAFT
+## Orchestrator contracts — v0.1
+- `GET /api/orch/health` (D46) — **STABLE v0.1** → `{ ok, version, uptimeMs, checks{vault,ai,flags,git} }`
+- `GET /api/orch/repos` (D21, admin) — **STABLE v0.1** → `RepoEntry[]` (incl. local `path`; admin-only)
+- `GET /api/orch/risk` (D24, admin) — **STABLE v0.1** → `RepoEntry[]` minus `path` (cloud-safe), risk LOW/MED/HIGH/CRITICAL
+- `GET /api/flags` (D06) — **STABLE v0.1** → `FeatureFlag[]`; `POST /api/flags` `{id,enabled}` (admin)
+- `POST /api/orch/repos/register` (D06/D21, admin) — **STABLE v0.1** `{path}` → register a Veridian-scope repo
 - `GET /api/orch/devices` (D29/D30) — DRAFT
 - `GET /api/orch/agents` (D36) — DRAFT
 - `GET /api/orch/context` (D32) — DRAFT
-- `GET /api/flags` · `POST /api/flags` (D06, admin) — DRAFT
 - `GET /api/orch/secrets` (D11, reference metadata only) — DRAFT
+
+> Android A07/A08 (repo/branch/risk) are UNBLOCKED — may integrate against `/api/orch/risk` + `/api/orch/health` v0.1.
 
 Android packages A06–A15 each name the contract(s) they depend on; they stay BLOCKED until
 the contract is STABLE here.

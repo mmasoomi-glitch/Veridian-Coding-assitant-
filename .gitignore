@@ -56,3 +56,5 @@ quarantine/
 # scratch/diagnostic scripts
 test_*.ps1
 *_debug.ps1
+feature-flags.json
+registered-repos.json

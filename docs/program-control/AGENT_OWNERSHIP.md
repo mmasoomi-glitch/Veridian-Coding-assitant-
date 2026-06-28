@@ -24,6 +24,14 @@ read-only and may run many-concurrent.
 ## Active claims
 | Package | Writer | Branch | Worktree | Files (scope) | Status |
 |---------|--------|--------|----------|---------------|--------|
-| D01 | commander | fix/veridian-pretest-release-gates | main | docs/program-control/** | LOCKED |
+| D01 | commander | fix/veridian-pretest-release-gates | main | docs/program-control/** | MERGED |
+| D06 | DESK-w1 | fix/veridian-pretest-release-gates | main | autopilot/flags-store.ts, server.ts(/api/flags) | LOCKED |
+| D21+D24 | DESK-w2 | fix/veridian-pretest-release-gates | main | orchestrator/repo-registry.ts, server.ts(/api/orch/*) | LOCKED |
+| D46 | DESK-w3 | fix/veridian-pretest-release-gates | main | server.ts(/api/orch/health) | LOCKED |
+| D47 | DESK-w4 | fix/veridian-pretest-release-gates | main | src/components/ControlCenter.tsx, TabbedApp.tsx | LOCKED |
+| A01–A05 | AND-w1 | wp/android-control | ../veridian-android | android-control/** | LOCKED |
 
-(rows added as writers are dispatched)
+Tracks: **CLI A (DESK)** = this session, desktop/backend/control-center on the integration
+branch with per-package commits (single sequential executor → integration branch, not N
+worktrees; see DECISIONS). **CLI B (AND)** = `../veridian-android` worktree on branch
+`wp/android-control`; launch command in status/android-current.md.

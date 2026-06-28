@@ -25,6 +25,11 @@ import * as totp from "./auth/totp";
 import * as vault from "./auth/vault";
 import { verifyIdToken, googleConfigured, googleClientId } from "./auth/google";
 import * as users from "./auth/users";
+import * as flags from "./autopilot/flags-store";
+import { scanRepos, scanReposSafe, registerRepo } from "./orchestrator/repo-registry";
+
+const ORCH_STARTED = Date.now();
+const CONTRACT_VERSION_ORCH = "v0.1";
 import { ask, askHistory } from "./autopilot/ai-ask";
 import * as shots from "./autopilot/screenshots-store";
 import * as todos from "./autopilot/todo-store";
@@ -173,6 +178,38 @@ app.post("/api/auth/logout", (req, res) => {
 app.get("/api/admin/users", requireAdmin, (req, res) => res.json(users.listUsers()));
 // Team summary: owner + members + solo/team state ("one-man army" until members added).
 app.get("/api/admin/team", requireAdmin, (req, res) => res.json(users.teamInfo()));
+
+// --- D06 Feature flags: read open (so subsystems/UI can resolve), writes admin-gated ---
+app.get("/api/flags", (req, res) => res.json(flags.listFlags()));
+app.post("/api/flags", requireAdmin, (req, res) => {
+  try {
+    const { id, enabled } = req.body || {};
+    res.json({ ok: true, flags: flags.setFlag(String(id || ""), !!enabled) });
+  } catch (e: any) {
+    res.status(400).json({ ok: false, error: e?.message || "could not set flag" });
+  }
+});
+
+// --- D46/D21/D24 Orchestrator (Veridian-scoped) ---
+app.get("/api/orch/health", (req, res) => {
+  res.json({
+    ok: true,
+    version: CONTRACT_VERSION_ORCH,
+    uptimeMs: Date.now() - ORCH_STARTED,
+    checks: {
+      vault: vault.isInitialized() || vault.sealingMethod() !== "none",
+      ai: aiConfigured(),
+      flags: flags.isEnabled("orchestrator"),
+      git: true
+    }
+  });
+});
+// Repo registry + risk — Veridian repo + its worktrees + Settings-added repos ONLY.
+app.get("/api/orch/repos", requireAdmin, (req, res) => res.json(flags.isEnabled("orchestrator") ? scanRepos() : []));
+app.get("/api/orch/risk", requireAdmin, (req, res) => res.json(flags.isEnabled("orchestrator") ? scanReposSafe() : []));
+app.post("/api/orch/repos/register", requireAdmin, (req, res) => {
+  res.json({ ok: true, repos: registerRepo(String((req.body || {}).path || "")) });
+});
 app.post("/api/admin/users", requireAdmin, (req, res) => {
   try {
     const { email, role, note } = req.body || {};

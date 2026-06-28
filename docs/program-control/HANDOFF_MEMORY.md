@@ -37,10 +37,18 @@ for Wave 1 foundation writers (D05–D11, D21–D24, D36, D46, D47).
 - tsc: clean. Suites green: dpapi, auth-vault(25), google-auth(13), admin-users(21),
   clip-sync(17), sync-sanitize(15), context-sanitizer(17), atomic, ai-provider(3).
 
-## Current incidents (Wave-0 git scan, 14 repos)
-- INC-001 CRITICAL: mira-vpn uncommitted new project (0 commits, no remote).
-- INC-002 CRITICAL: PC2GSM 2 unpushed local commits, no upstream.
-- INC-003/004 MEDIUM: AFAQ10 stale+20 prunable worktrees; vualet-web/calc-proxy dirty; Vualet behind 11; scws 1.5y stale.
+## SCOPE (effective 2026-06-29) — VERIDIAN ONLY
+In scope: `C:\Users\HI\veridian`, its git remote(s), its registered worktrees, repos
+added via Settings. Everything else OUT OF SCOPE — no scan/commit/push/rescue/incident.
+Whole-disk scanning DISABLED by default. Active Veridian incident count: **0**.
+
+## Session agents released
+4 Wave-0 scout agents (reuse-map, git-risk, keystroke-diagnosis, tailscale) — all
+COMPLETED and released; none running. Stray scout scripts removed (commit f00b2e8).
+No unrelated user apps/services/containers/CLIs touched.
+
+## Current incidents
+- None active (Veridian). Prior cross-repo findings reclassified OUT_OF_SCOPE in INCIDENT_LOG.
 
 ## Wave-0 findings (VERIFIED, 2026-06-28)
 - D02 reuse map: feature-flags = NOT FOUND (build `autopilot/flags-store.ts` + `/api/flags`); all other pillars have reuse targets (vault, ai/providers, lib/atomic, sync-store, auth/users, telemetry poller, TabbedApp tab pattern, server route pattern). Control Center tab + `/api/orch/*` insertion points identified.

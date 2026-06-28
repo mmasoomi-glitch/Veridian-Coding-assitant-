@@ -1,0 +1,7 @@
+task: D24 risk classifier
+provider: openrouter
+model: deepseek/deepseek-chat
+purpose: draft pure classifier
+input-sensitivity: none (no secrets)
+redaction: n/a
+decision: review then adopt if matches spec table
