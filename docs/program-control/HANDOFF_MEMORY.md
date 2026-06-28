@@ -74,9 +74,21 @@ No unrelated user apps/services/containers/CLIs touched.
 - None blocking Wave 0. External (owner): Google Client ID for cloud; OpenRouter privacy
   toggle for owl-alpha. Structural: Android track needs a 2nd Claude Code CLI (see DECISIONS).
 
-## Active now (Wave 2)
-6 parallel writer agents dispatched 2026-06-29, exclusive module ownership (none touch
-server.ts; routes wired by commander after): D05 settings-store, D07 lock-manager, D08
-dep-graph, D11 secret-reference-registry (metadata-only), D22+D23 branch+worktree registry,
-D29+D30 device-registry + tailscale collector. Each: OpenRouter draft → evidence dir →
-module + tsx test → tsc. Keystroke: DEFERRED per §13 (untouched).
+## Wave 2 — VERIFICATION CLOSED (2026-06-29)
+12 review agents ran (R01–R12). Verdict by package:
+- D01,D03,D05,D06,D08,D21,D22,D23,D24,D46 = LOCAL TESTED + INDEPENDENTLY REVIEWED (APPROVE).
+- D29/D30 = APPROVE (low: add runtime ps1 output test).
+- D47 = endpoints RUNTIME VERIFIED (health 200/flags 200/admin 403 on :3941); React UI
+  NOT browser-verified (needs admin session in a browser — owner-gated). Label: LOCAL TESTED + API-RUNTIME-VERIFIED.
+- **D07** REJECT→REPAIRED→RE-REVIEWED CLOSED (R02b): owner-checked `release(id,owner?)`.
+  R02's 'backslash CRITICAL' was a FALSE POSITIVE (regex correct, proven by test).
+- **D11** REJECT→REPAIRED→RE-REVIEWED→2nd CRITICAL(newline-split)→REPAIRED CLOSED (R04b):
+  looksLikeSecret now catches PEM/AWS-slash/conn-string/uri-creds + newline-split; paths still pass.
+- Big-LLM evidence genuine for all (R11); D07+D11 have real qwen critiques/corrections
+  (raw output kept local & git-ignored; manifest+hash committed).
+- Test quality (R10): suites are happy-path-heavy → negative tests added for D07/D11; other
+  modules' deeper negative tests are a recorded follow-up (LOW/MED), not Wave-2 blockers.
+Commits: c6e54f1, 44ffdf8, 5c101d3, c839fe9, 9b9660c, 4936178 (all pushed).
+Git-hygiene slip this wave: a `git add -A` swept reviewer scratch into one commit; removed
+in 4936178 + root-scratch now git-ignored. No secrets ever committed (push-protection + sweeps).
+Keystroke: DEFERRED per §13 (untouched). No Wave-2 BLOCKER/CRITICAL remain open → Wave 3 unblocked.
