@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { LayoutDashboard, Clipboard, MessageSquare, Image, ListTodo, Settings as SettingsIcon, Keyboard, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, Clipboard, MessageSquare, Image, ListTodo, Settings as SettingsIcon, Keyboard, ShieldCheck, Gauge } from "lucide-react";
 import App from "../App";
 import ClipboardTab from "./ClipboardTab";
 import AiAskTab from "./AiAskTab";
@@ -9,6 +9,7 @@ import TodoTab from "./TodoTab";
 import SettingsTab from "./SettingsTab";
 import KeyloggerTab from "./KeyloggerTab";
 import AdminPanel from "./AdminPanel";
+import ControlCenter from "./ControlCenter";
 import BurnoutNudge from "./BurnoutNudge";
 
 type TabDef = { id: string; label: string; Icon: typeof LayoutDashboard };
@@ -23,7 +24,8 @@ const TABS: TabDef[] = [
   { id: "settings", label: "Settings", Icon: SettingsIcon }
 ];
 
-// The Access tab is appended only for admins (see role gating below).
+// Admin-only tabs are appended only for admins (see role gating below).
+const CONTROL_TAB: TabDef = { id: "control", label: "Control Center", Icon: Gauge };
 const ACCESS_TAB: TabDef = { id: "access", label: "Access", Icon: ShieldCheck };
 
 export default function TabbedApp({ apiBase }: { apiBase: string }) {
@@ -49,7 +51,7 @@ export default function TabbedApp({ apiBase }: { apiBase: string }) {
   }, [apiBase]);
 
   const isAdmin = role === "admin";
-  const tabs = isAdmin ? [...TABS, ACCESS_TAB] : TABS;
+  const tabs = isAdmin ? [...TABS, CONTROL_TAB, ACCESS_TAB] : TABS;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -94,6 +96,7 @@ export default function TabbedApp({ apiBase }: { apiBase: string }) {
               {tab === "todo" && <TodoTab apiBase={apiBase} />}
               {tab === "keylog" && <KeyloggerTab apiBase={apiBase} />}
               {tab === "settings" && <SettingsTab apiBase={apiBase} />}
+              {tab === "control" && isAdmin && <ControlCenter apiBase={apiBase} />}
               {tab === "access" && isAdmin && <AdminPanel apiBase={apiBase} />}
             </div>
           )}
