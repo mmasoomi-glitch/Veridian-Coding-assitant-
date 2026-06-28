@@ -1,0 +1,53 @@
+# MODEL EXECUTION POLICY (mandatory)
+
+Every feature, repair, redesign, or Android package follows this routing. No exceptions
+without explicit owner authorization recorded in DECISIONS.md.
+
+## Roles
+- **Claude Opus** — planning, architecture audit, problem adjudication, the practicality /
+  security / blast-radius gates, DeepSeek-bundle audit (G1–G9), independent review, release
+  decision. Opus does NOT author feature implementation.
+- **DeepSeek V4 (via OpenRouter)** — the SOLE code author: complete implementation bundles,
+  repair bundles, complete tests, negative tests, exact changed-file list. Reached ONLY
+  through `scripts/ai/openrouter_deepseek_bundle.py`.
+- **Claude Haiku** — controlled disk writer (apply-only). Applies Opus-approved DeepSeek
+  bundles, runs formatter/lint/tsc/tests/safe runtime, makes trivial syntax fixes, commits,
+  pushes the feature branch. No architecture/feature invention.
+- **Anthropic HTTP provider** — ASSESS ONLY (planning/explanation). Cannot modify files,
+  cannot be shown as a build/writing agent, cannot claim a build started.
+
+## Forbidden
+Qwen · silent fallback models · unapproved OpenRouter models · Opus-authored feature
+implementation · Haiku-invented architecture/business logic · DeepSeek code applied before
+Opus gates · model substitution without explicit owner authorization · ad-hoc OpenRouter
+calls outside the gateway.
+
+## The route MUST be proven before any code-author call
+Gateway: `scripts/ai/openrouter_deepseek_bundle.py`. Before each request it:
+- reads the key from env / vault reference (never printed/logged),
+- requires `VERIDIAN_DEEPSEEK_CODE_MODEL` (no guessing),
+- validates it via live OpenRouter `/models` metadata: must exist, must start with
+  `deepseek/`, must match `VERIDIAN_DEEPSEEK_APPROVED_PREFIX` (default `deepseek/deepseek-v4`),
+- rejects Qwen / non-DeepSeek / unknown / fallback lists / `route:"fallback"`,
+- redaction-scans the outbound request (aborts if it carries a secret),
+- sends exactly ONE explicit model (no fallback list),
+- verifies the RESPONSE model matches the approved route (substitution → BLOCK),
+- writes raw output to a git-ignored private dir; redacted metadata+hash to
+  `docs/program-control/ai-evidence/<package-id>/`.
+
+If the route cannot be proven: **MODEL_ROUTE_BLOCKED. No fallback. No Qwen. No substitute. No code writing.**
+
+## Verified routes (live OpenRouter, 2026-06-29)
+Approved DeepSeek V4: `deepseek/deepseek-v4-pro` (default code author), `deepseek/deepseek-v4-flash`.
+Set `VERIDIAN_DEEPSEEK_CODE_MODEL=deepseek/deepseek-v4-pro`. Tests: `scripts/ai/test_gateway.py`
+(mock-only: validates V4, blocks qwen/non-v4/unknown/missing/substitution, redaction abort).
+
+## Config (env / vault reference only — never hardcode keys)
+`OPENROUTER_API_KEY` (or `VERIDIAN_ENV`) · `VERIDIAN_DEEPSEEK_CODE_MODEL` ·
+`VERIDIAN_OPENROUTER_BASE_URL` · `VERIDIAN_DEEPSEEK_APPROVED_PREFIX` ·
+`VERIDIAN_AI_PRIVATE_ARTIFACT_DIR`.
+
+## Note on this session
+This Claude Code session is Opus. Haiku-apply and Opus-review are run as subagents with the
+matching model. DeepSeek is reachable ONLY via the gateway (it is not a Claude Code subagent
+model). Anthropic-HTTP `ai/providers.ts` stays assess-only inside the product.
