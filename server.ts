@@ -23,6 +23,7 @@ import { startSyncClient, startClipSyncClient } from "./autopilot/sync-client";
 import { saveScratch, getScratch } from "./autopilot/scratch-store";
 import * as totp from "./auth/totp";
 import * as vault from "./auth/vault";
+import { verifyIdToken, googleConfigured, googleClientId } from "./auth/google";
 import { ask, askHistory } from "./autopilot/ai-ask";
 import * as shots from "./autopilot/screenshots-store";
 import * as todos from "./autopilot/todo-store";
@@ -86,15 +87,35 @@ function setSessionCookie(req: any, res: any): void {
 
 app.get("/api/auth/status", (req, res) => {
   const lock = totp.lockState();
+  const google = googleConfigured();
+  const cloudTotp = totp.cloudTotpAvailable();
   res.json({
     required: totp.authRequired(),
     authed: totp.verifySessionToken(getCookie(req, "vsess")),
-    configured: totp.isConfigured(),
-    needsSetup: !totp.isConfigured(),
-    sealing: vault.sealingMethod(),         // "dpapi" | "machine" | "none"
+    configured: totp.isConfigured(),         // a local DPAPI vault (passphrase+TOTP) exists
+    // First-run setup only applies to the local vault path. The cloud uses Google
+    // and/or env TOTP, so it never shows the passphrase-setup screen.
+    needsSetup: !totp.isConfigured() && !google && !cloudTotp,
+    sealing: vault.sealingMethod(),          // "dpapi" | "machine" | "none"
+    google,                                  // show "Sign in with Google" button
+    googleClientId: google ? googleClientId() : "",
+    cloudTotp,                               // show the parallel TOTP code field
     locked: lock.locked,
     lockedMs: lock.retryInMs
   });
+});
+
+// Cloud parallel login #2: Google Sign-In. Verifies the ID token (signature +
+// audience + email allowlist) and issues the same session cookie. "This or that"
+// alongside the TOTP login above.
+app.post("/api/auth/google", async (req, res) => {
+  const lock = totp.lockState();
+  if (lock.locked) return res.status(429).json({ ok: false, error: "too many attempts — locked", lockedMs: lock.retryInMs });
+  const idToken = String((req.body || {}).idToken || (req.body || {}).credential || "");
+  const result = await verifyIdToken(idToken);
+  if (!result.ok) return res.status(401).json({ ok: false, error: "google sign-in rejected" });
+  setSessionCookie(req, res);
+  res.json({ ok: true, email: result.email });
 });
 
 // First-run: create the strong login (master passphrase + TOTP). Local-only so a

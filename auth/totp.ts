@@ -13,15 +13,40 @@ import crypto from "node:crypto";
 import * as QRCode from "qrcode";
 import { authenticator } from "otplib";
 import * as vault from "./vault";
+import { googleConfigured } from "./google";
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
+// ---------- environment-backed secrets (CLOUD: no DPAPI vault) ----------
+// On the cloud dashboard there is no local vault. A standalone TOTP secret and a
+// session-signing secret come from the environment so the cloud can offer a TOTP
+// login (parallel to Google) and sign sessions.
+function cloudTotpSecret(): string {
+  return process.env.VERIDIAN_CLOUD_TOTP_SECRET || process.env.TOTP_SECRET || "";
+}
+export function cloudTotpAvailable(): boolean {
+  return cloudTotpSecret().length > 0;
+}
+// The active TOTP secret: the sealed vault's (local strong login) or the cloud env's.
+function activeTotpSecret(): string {
+  return vault.getTotpSecret() || cloudTotpSecret();
+}
+// The session-signing secret: vault's (local) or AUTH_SESSION_SECRET (cloud).
+function sessionSecret(): string {
+  return vault.getSessionSecret() || process.env.AUTH_SESSION_SECRET || "";
+}
+
 // ---------- gating ----------
 
-// Auth is required once a vault exists (the owner set up a strong login), or when
-// explicitly forced via env, or (handled in server middleware) on a network bind.
+// Auth is required once a strong login exists (local vault), or a cloud login
+// method is configured (Google or env TOTP), or it's explicitly forced via env.
 export function authRequired(): boolean {
-  return vault.isInitialized() || process.env.VERIDIAN_AUTH === "totp";
+  return (
+    vault.isInitialized() ||
+    process.env.VERIDIAN_AUTH === "totp" ||
+    cloudTotpAvailable() ||
+    googleConfigured()
+  );
 }
 
 export function isConfigured(): boolean {
@@ -68,7 +93,7 @@ export function verifyPassphrase(passphrase: string): boolean {
 
 export function verifyCode(code: string): boolean {
   try {
-    const secret = vault.getTotpSecret();
+    const secret = activeTotpSecret();
     if (!secret || !code) return false;
     return authenticator.verify({ token: String(code).trim(), secret });
   } catch {
@@ -110,8 +135,12 @@ function recordSuccess(): void {
 
 // ---------- combined 2FA login ----------
 
-/** Verify passphrase AND second factor (TOTP code or recovery code). On success
- *  returns a session token; on failure increments the lockout counter. */
+/** Login. Two modes, both rate-limited:
+ *  - LOCAL (a DPAPI vault exists): requires master passphrase AND a second factor
+ *    (TOTP code or recovery code) — full 2FA.
+ *  - CLOUD (no vault, env TOTP secret): requires just the TOTP code — this is the
+ *    "parallel" method that sits alongside Google sign-in ("this or that").
+ *  On success returns a session token; on failure bumps the lockout counter. */
 export async function login(
   passphrase: string,
   code: string,
@@ -120,9 +149,17 @@ export async function login(
   const ls = lockState();
   if (ls.locked) return { ok: false, error: "locked", lockedMs: ls.retryInMs };
 
-  const passOk = verifyPassphrase(passphrase);
-  const secondOk = recovery ? await verifyRecovery(recovery) : verifyCode(code);
-  if (!passOk || !secondOk) {
+  let ok: boolean;
+  if (vault.isInitialized()) {
+    const passOk = verifyPassphrase(passphrase);
+    const secondOk = recovery ? await verifyRecovery(recovery) : verifyCode(code);
+    ok = passOk && secondOk;
+  } else {
+    // Cloud parallel TOTP: the code alone (no local passphrase exists here).
+    ok = verifyCode(code);
+  }
+
+  if (!ok) {
     recordFail();
     const after = lockState();
     return { ok: false, error: "invalid", lockedMs: after.locked ? after.retryInMs : undefined };
@@ -139,7 +176,7 @@ function hmacHex(data: string, secret: string): string {
 
 export function createSessionToken(): string {
   try {
-    const secret = vault.getSessionSecret();
+    const secret = sessionSecret();
     if (!secret) return "";
     const payload = { exp: Date.now() + SEVEN_DAYS_MS };
     const payloadB64 = Buffer.from(JSON.stringify(payload), "utf8").toString("base64");
@@ -156,7 +193,7 @@ export function verifySessionToken(token?: string): boolean {
     if (dot === -1) return false;
     const payloadB64 = token.slice(0, dot);
     const sig = token.slice(dot + 1);
-    const secret = vault.getSessionSecret();
+    const secret = sessionSecret();
     if (!secret) return false;
     const expected = hmacHex(payloadB64, secret);
     const a = Buffer.from(sig, "hex");

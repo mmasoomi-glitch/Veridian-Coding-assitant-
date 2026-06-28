@@ -30,6 +30,14 @@ import {
 
 type Sealing = "dpapi" | "machine" | "none";
 
+// Google Identity Services is loaded via a <script> tag (no npm dep), so we
+// declare a minimal global to keep tsc strict-clean.
+declare global {
+  interface Window {
+    google?: any;
+  }
+}
+
 interface AuthStatus {
   required: boolean;
   authed: boolean;
@@ -38,6 +46,10 @@ interface AuthStatus {
   sealing?: Sealing;
   locked?: boolean;
   lockedMs?: number;
+  // Cloud / parallel login methods (presence-gated by the server).
+  google?: boolean;
+  googleClientId?: string;
+  cloudTotp?: boolean;
 }
 
 interface SetupInfo {
@@ -48,6 +60,43 @@ interface SetupInfo {
 }
 
 const fade = { duration: 0.4, ease: "easeInOut" } as const;
+
+const GIS_SRC = "https://accounts.google.com/gsi/client";
+
+// Inject the Google Identity Services script once and resolve when ready.
+// Guards against double-injection across re-renders / remounts.
+let gisLoadPromise: Promise<void> | null = null;
+function loadGis(): Promise<void> {
+  if (typeof window !== "undefined" && window.google?.accounts?.id) {
+    return Promise.resolve();
+  }
+  if (gisLoadPromise) return gisLoadPromise;
+  gisLoadPromise = new Promise<void>((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>(`script[src="${GIS_SRC}"]`);
+    if (existing) {
+      if (window.google?.accounts?.id) {
+        resolve();
+      } else {
+        existing.addEventListener("load", () => resolve(), { once: true });
+        existing.addEventListener("error", () => reject(new Error("gis load failed")), {
+          once: true,
+        });
+      }
+      return;
+    }
+    const s = document.createElement("script");
+    s.src = GIS_SRC;
+    s.async = true;
+    s.defer = true;
+    s.onload = () => resolve();
+    s.onerror = () => {
+      gisLoadPromise = null; // allow a retry on next mount
+      reject(new Error("gis load failed"));
+    };
+    document.head.appendChild(s);
+  });
+  return gisLoadPromise;
+}
 
 /* ---------- small shared bits ---------- */
 
@@ -154,6 +203,10 @@ export default function LoginGate({
   // lock countdown (seconds remaining)
   const [lockLeft, setLockLeft] = useState(0);
   const lockTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Google sign-in (cloud) — the GIS button is rendered into this div.
+  const googleBtnRef = useRef<HTMLDivElement | null>(null);
+  const googleInited = useRef(false);
 
   // setup state
   const [setupPass, setSetupPass] = useState("");
@@ -262,6 +315,122 @@ export default function LoginGate({
       setSubmitting(false);
     }
   };
+
+  /* ---- cloud TOTP-only submit (no passphrase, cloud mode) ---- */
+  const submitCloudCode = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (locked) return;
+    setError("");
+    const secret = code.trim();
+    if (!secret) return;
+    setSubmitting(true);
+    try {
+      const r = await fetch(`${apiBase}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ code: secret }),
+      });
+      if (r.ok) {
+        setCode("");
+        await checkStatus();
+        setStatus((prev) => (prev ? { ...prev, authed: true } : prev));
+      } else {
+        let lockedMs = 0;
+        try {
+          const j = await r.json();
+          lockedMs = Number(j?.lockedMs) || 0;
+        } catch {
+          /* ignore */
+        }
+        if (r.status === 429 || lockedMs > 0) {
+          startCountdown(lockedMs || 30000);
+          triggerError("too many attempts — locked");
+        } else {
+          triggerError("invalid code");
+        }
+      }
+    } catch {
+      triggerError("network error — is the server running?");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  /* ---- Google Identity Services credential callback ---- */
+  const onGoogleCredential = useCallback(
+    async (resp: { credential?: string }) => {
+      const credential = resp?.credential;
+      if (!credential) {
+        triggerError("Google sign-in returned no credential");
+        return;
+      }
+      setError("");
+      setSubmitting(true);
+      try {
+        const r = await fetch(`${apiBase}/api/auth/google`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ credential }),
+        });
+        const j = await r.json().catch(() => ({}));
+        if (r.ok && j?.ok) {
+          await checkStatus();
+          setStatus((prev) => (prev ? { ...prev, authed: true } : prev));
+        } else if (r.status === 401) {
+          triggerError("Google sign-in was rejected");
+        } else {
+          triggerError("Google sign-in failed");
+        }
+      } catch {
+        triggerError("network error — is the server running?");
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    // checkStatus & apiBase are stable; triggerError is defined in scope.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [apiBase, checkStatus],
+  );
+
+  // Load GIS and render the Google button on the unlock screen when enabled.
+  const showUnlock = !!status && status.required && !status.authed && !status.needsSetup;
+  const showGoogle = showUnlock && !!status?.google && !!status?.googleClientId;
+
+  useEffect(() => {
+    if (!showGoogle) return;
+    let cancelled = false;
+    loadGis()
+      .then(() => {
+        if (cancelled) return;
+        const gid = window.google?.accounts?.id;
+        const el = googleBtnRef.current;
+        if (!gid || !el) return;
+        if (!googleInited.current) {
+          gid.initialize({
+            client_id: status!.googleClientId,
+            callback: onGoogleCredential,
+          });
+          googleInited.current = true;
+        }
+        el.innerHTML = "";
+        gid.renderButton(el, {
+          theme: "filled_black",
+          size: "large",
+          shape: "pill",
+          text: "signin_with",
+          width: 320,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) triggerError("couldn't load Google sign-in");
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showGoogle, status?.googleClientId, onGoogleCredential]);
 
   /* ---- first-run setup submit ---- */
   const passTooShort = setupPass.length > 0 && setupPass.length < 8;
@@ -545,30 +714,148 @@ export default function LoginGate({
     );
   }
 
-  /* ===== STATE: unlock (configured && !authed) ===== */
+  /* ===== STATE: unlock (!authed && !needsSetup) ===== */
+  // Available login methods, presence-gated by the server status.
+  const hasGoogle = !!status.google && !!status.googleClientId;
+  const hasLocalVault = !!status.configured; // passphrase + TOTP
+  const hasCloudCode = !hasLocalVault && !!status.cloudTotp; // code-only cloud
+  const hasCodeMethod = hasLocalVault || hasCloudCode;
+
+  // Subtitle reflects what's on offer.
+  const sub = hasLocalVault
+    ? "Passphrase + 2FA required"
+    : hasGoogle && hasCloudCode
+      ? "Sign in with Google or a 2FA code"
+      : hasGoogle
+        ? "Sign in with Google"
+        : "Enter your 2FA code";
+
+  const errorBlock = (
+    <AnimatePresence>
+      {error && (
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="text-xs text-rose-400 font-mono text-center"
+        >
+          {error}
+        </motion.p>
+      )}
+    </AnimatePresence>
+  );
+
   return (
     <Wrap>
       <CardShell shake={shake}>
-        <Header
-          title="Veridian — Admin Access"
-          sub="Passphrase + 2FA required"
-          sealing={status.sealing}
-        />
+        <Header title="Veridian — Admin Access" sub={sub} sealing={status.sealing} />
 
-        <form onSubmit={submitLogin} className="space-y-3">
-          <Field
-            label="Master passphrase"
-            icon={<KeyRound className="h-3.5 w-3.5" />}
-            type="password"
-            autoFocus
-            autoComplete="current-password"
-            disabled={locked || submitting}
-            value={passphrase}
-            onChange={(ev) => setPassphrase(ev.target.value)}
-            placeholder="master passphrase"
-          />
+        {/* ---- Google sign-in (cloud) ---- */}
+        {hasGoogle && (
+          <div className="space-y-2">
+            <div ref={googleBtnRef} className="flex justify-center [color-scheme:light]" />
+            {/* fallback label shown until/if the GIS button renders */}
+            <p className="text-[10px] font-mono uppercase tracking-wider text-slate-600 text-center">
+              cloud sign-in
+            </p>
+          </div>
+        )}
 
-          {!useRecovery ? (
+        {/* ---- "or" divider when both Google and a code method are available ---- */}
+        {hasGoogle && hasCodeMethod && (
+          <div className="flex items-center gap-3">
+            <div className="h-px flex-1 bg-slate-800" />
+            <span className="text-[10px] font-mono uppercase tracking-wider text-slate-600">or</span>
+            <div className="h-px flex-1 bg-slate-800" />
+          </div>
+        )}
+
+        {/* ---- Local vault: passphrase + TOTP (existing flow, unchanged) ---- */}
+        {hasLocalVault && (
+          <>
+            <form onSubmit={submitLogin} className="space-y-3">
+              <Field
+                label="Master passphrase"
+                icon={<KeyRound className="h-3.5 w-3.5" />}
+                type="password"
+                autoFocus
+                autoComplete="current-password"
+                disabled={locked || submitting}
+                value={passphrase}
+                onChange={(ev) => setPassphrase(ev.target.value)}
+                placeholder="master passphrase"
+              />
+
+              {!useRecovery ? (
+                <div>
+                  <label className="text-[11px] font-mono uppercase tracking-wider text-slate-500 flex items-center gap-1.5 mb-1.5">
+                    <KeyRound className="h-3.5 w-3.5" /> Authenticator code
+                  </label>
+                  <input
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={6}
+                    disabled={locked || submitting}
+                    value={code}
+                    onChange={(ev) => setCode(ev.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder="000000"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-center text-2xl font-mono tracking-[0.4em] text-emerald-300 placeholder-slate-700 focus:border-emerald-500/50 focus:outline-none transition-all disabled:opacity-50"
+                  />
+                </div>
+              ) : (
+                <Field
+                  label="Recovery code"
+                  icon={<KeyRound className="h-3.5 w-3.5" />}
+                  type="text"
+                  autoComplete="off"
+                  disabled={locked || submitting}
+                  value={recovery}
+                  onChange={(ev) => setRecovery(ev.target.value)}
+                  placeholder="xxxxx-xxxxx"
+                />
+              )}
+
+              {errorBlock}
+
+              <button
+                type="submit"
+                disabled={submitting || locked}
+                className="w-full px-3 py-2.5 rounded-lg text-sm font-bold bg-emerald-500 text-slate-950 hover:bg-emerald-400 transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+              >
+                {locked ? (
+                  <>
+                    <Lock className="h-4 w-4" /> locked, try again in {lockLeft}s
+                  </>
+                ) : submitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Verifying…
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="h-4 w-4" /> Unlock
+                  </>
+                )}
+              </button>
+            </form>
+
+            <button
+              type="button"
+              onClick={() => {
+                setUseRecovery((v) => !v);
+                setError("");
+                setCode("");
+                setRecovery("");
+              }}
+              className="w-full text-center text-[11px] font-mono text-slate-500 hover:text-cyan-300 transition-all"
+            >
+              {useRecovery ? "← Use an authenticator code" : "Use a recovery code instead"}
+            </button>
+          </>
+        )}
+
+        {/* ---- Cloud TOTP-only: 6-digit code, no passphrase ---- */}
+        {hasCloudCode && (
+          <form onSubmit={submitCloudCode} className="space-y-3">
             <div>
               <label className="text-[11px] font-mono uppercase tracking-wider text-slate-500 flex items-center gap-1.5 mb-1.5">
                 <KeyRound className="h-3.5 w-3.5" /> Authenticator code
@@ -577,6 +864,7 @@ export default function LoginGate({
                 inputMode="numeric"
                 pattern="[0-9]*"
                 maxLength={6}
+                autoFocus={!hasGoogle}
                 disabled={locked || submitting}
                 value={code}
                 onChange={(ev) => setCode(ev.target.value.replace(/\D/g, "").slice(0, 6))}
@@ -584,65 +872,33 @@ export default function LoginGate({
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-center text-2xl font-mono tracking-[0.4em] text-emerald-300 placeholder-slate-700 focus:border-emerald-500/50 focus:outline-none transition-all disabled:opacity-50"
               />
             </div>
-          ) : (
-            <Field
-              label="Recovery code"
-              icon={<KeyRound className="h-3.5 w-3.5" />}
-              type="text"
-              autoComplete="off"
-              disabled={locked || submitting}
-              value={recovery}
-              onChange={(ev) => setRecovery(ev.target.value)}
-              placeholder="xxxxx-xxxxx"
-            />
-          )}
 
-          <AnimatePresence>
-            {error && (
-              <motion.p
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="text-xs text-rose-400 font-mono text-center"
-              >
-                {error}
-              </motion.p>
-            )}
-          </AnimatePresence>
+            {errorBlock}
 
-          <button
-            type="submit"
-            disabled={submitting || locked}
-            className="w-full px-3 py-2.5 rounded-lg text-sm font-bold bg-emerald-500 text-slate-950 hover:bg-emerald-400 transition-all disabled:opacity-60 flex items-center justify-center gap-2"
-          >
-            {locked ? (
-              <>
-                <Lock className="h-4 w-4" /> locked, try again in {lockLeft}s
-              </>
-            ) : submitting ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" /> Verifying…
-              </>
-            ) : (
-              <>
-                <ShieldCheck className="h-4 w-4" /> Unlock
-              </>
-            )}
-          </button>
-        </form>
+            <button
+              type="submit"
+              disabled={submitting || locked}
+              className="w-full px-3 py-2.5 rounded-lg text-sm font-bold bg-emerald-500 text-slate-950 hover:bg-emerald-400 transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+            >
+              {locked ? (
+                <>
+                  <Lock className="h-4 w-4" /> locked, try again in {lockLeft}s
+                </>
+              ) : submitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Verifying…
+                </>
+              ) : (
+                <>
+                  <ShieldCheck className="h-4 w-4" /> Unlock
+                </>
+              )}
+            </button>
+          </form>
+        )}
 
-        <button
-          type="button"
-          onClick={() => {
-            setUseRecovery((v) => !v);
-            setError("");
-            setCode("");
-            setRecovery("");
-          }}
-          className="w-full text-center text-[11px] font-mono text-slate-500 hover:text-cyan-300 transition-all"
-        >
-          {useRecovery ? "← Use an authenticator code" : "Use a recovery code instead"}
-        </button>
+        {/* ---- Google-only (no code method): surface errors here ---- */}
+        {hasGoogle && !hasCodeMethod && errorBlock}
       </CardShell>
     </Wrap>
   );
