@@ -29,6 +29,9 @@ veridian.cred
 veridian.cred.*
 auth-users.json
 clip-sync.json
+# Orchestrator runtime registries (data, not code) + any raw AI-evidence captures
+orchestrator-*.json
+docs/program-control/ai-evidence/**/raw*
 clip-counts.json
 ask-history.json
 todos.json
