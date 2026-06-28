@@ -59,14 +59,24 @@ No unrelated user apps/services/containers/CLIs touched.
 ## Rollback references
 - Last good commit before orchestrator: `444b1bd` (owner/team). Branch pushed to origin.
 
-## Completed work (this program)
-- IN PROGRESS D01 program-control bootstrap (this commit). VERIFIED D03 vault, D41 skill located.
+## Truthful package status (no padding)
+- D01 program-control: IMPLEMENTED (docs).
+- D03 vault: VERIFIED (capability + 25-check test, pre-existing).
+- D06 flags, D21 repo-registry, D24 risk, D46 health, D47 Control Center UI:
+  **IMPLEMENTED — LOCAL TESTED** (tsc clean + unit tests). NOT runtime-verified end-to-end,
+  NOT independently reviewed, NOT integrated to main, NOT deployed/production-tested.
+  Pushed to feature branch `fix/veridian-pretest-release-gates` only.
+- A01–A05 Android: **SCAFFOLDED / UNVERIFIED** (no Android build/run; CLI B not active).
+- Big-LLM evidence exists ONLY for D24 (docs/program-control/ai-evidence/D24). Earlier
+  desktop modules were author-written, not skill-drafted — do not claim otherwise.
 
 ## Exact blockers
 - None blocking Wave 0. External (owner): Google Client ID for cloud; OpenRouter privacy
   toggle for owl-alpha. Structural: Android track needs a 2nd Claude Code CLI (see DECISIONS).
 
-## Next three actions
-1. Wave-1 Definition Packs (D06 feature-flags, D21 repo-registry, D24 risk-scanner, D46 control-center API) via prevention-first OpenRouter loop, then exclusive-writer build.
-2. Build D06+D21+D24 (foundation writers) + a first /api/orch endpoint; commit per unit; publish contracts in INTERFACE_CONTRACTS.
-3. Owner decisions: (a) proceed to Wave-1 writers now? (b) keystroke — fix consent-based or DEFER per §13? (c) Android via 2nd CLI or sequence here?
+## Active now (Wave 2)
+6 parallel writer agents dispatched 2026-06-29, exclusive module ownership (none touch
+server.ts; routes wired by commander after): D05 settings-store, D07 lock-manager, D08
+dep-graph, D11 secret-reference-registry (metadata-only), D22+D23 branch+worktree registry,
+D29+D30 device-registry + tailscale collector. Each: OpenRouter draft → evidence dir →
+module + tsx test → tsc. Keystroke: DEFERRED per §13 (untouched).

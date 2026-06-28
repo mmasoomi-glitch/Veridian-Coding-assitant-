@@ -1,0 +1,16 @@
+{
+  "task": "D22 branch registry + ancestry; D23 worktree registry",
+  "provider": "openrouter",
+  "model": "deepseek/deepseek-chat",
+  "purpose": "draft read-only, veridian-scoped git branch/worktree registry module",
+  "input-sensitivity": "none (no secrets, no private paths sent)",
+  "redaction": "n/a",
+  "decision": "reviewed + adopted with fixes",
+  "fixes-over-draft": [
+    "merged detection: draft used !!git(branch --merged) (true if ANY merged branch exists); replaced with a per-branch merged-set membership check + default-branch self-merge",
+    "ahead/behind: draft regex grabbed first two numbers ambiguously; replaced with explicit /ahead N/ + /behind N/ parsing of upstream:track",
+    "field separator: \\x00 rejected by execFileSync (no null bytes in args) -> switched to \\x1f unit separator",
+    "stderr: stdio ignore on stderr so swallowed git errors do not leak to console",
+    "worktree parse: flush-on-new-block + null-guard so detached/locked/prunable flags map correctly"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "task": "D08 work-package dependency graph",
+  "provider": "openrouter",
+  "model": "deepseek/deepseek-chat",
+  "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+  "purpose": "draft pure TS dep-graph module (topoOrder/detectCycles/readyPackages/unknownDeps/dependentsOf)",
+  "input-sensitivity": "none (algorithm spec only; no secrets, PII, paths, telemetry)",
+  "redaction": "n/a — nothing sensitive sent",
+  "response-sha256": "facb43474738de4b2c016e51deeb9897e3faedd2021a90746869a473c6ae402c",
+  "decision": "REVIEWED, ADOPTED-WITH-FIXES. Two bugs found in draft and corrected in final: (1) topoOrder built its exclusion set from unknownDeps(...).missing (the missing target ids) instead of the ids of packages that HAVE unknown deps; (2) Tarjan SCC reused the `index` variable already consumed by the enclosing pkgs.forEach loop, corrupting discovery indices. Final hand-authored module re-implements both correctly and adds deterministic tie-breaking by input order.",
+  "files": [
+    "orchestrator/dep-graph.ts",
+    "tests/d08-depgraph.test.ts"
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "task": "D29 trusted device registry",
+  "provider": "openrouter",
+  "model": "deepseek/deepseek-chat",
+  "purpose": "draft device-registry.ts (atomic-persisted trusted device registry)",
+  "input-sensitivity": "none (no secrets, no PII)",
+  "redaction": "n/a",
+  "response-hash": "sha256:849b644f33e5355449a52bb63a78e19b39b66df4d56e9b135279128a2cd0fdaa",
+  "decision": "reviewed and adopted with one robustness hardening: readDevices() guards against non-array JSON (Array.isArray) to match repo-registry.ts tolerant-read pattern"
+}

@@ -1,0 +1,15 @@
+{
+  "task": "D11 secret-reference registry (metadata only, never values)",
+  "provider": "openrouter",
+  "model": "qwen/qwen3-coder",
+  "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+  "purpose": "draft the secret-reference registry module + looksLikeSecret guard before authoring final",
+  "input-sensitivity": "none (spec/types only; no secrets, env, private paths, or PII sent)",
+  "redaction": "n/a — prompt carried no sensitive data; verified before send",
+  "response-hash-sha256": "6e233561abc45e483dbbf9cb8d982063b343d56493b02944a32f104e87bd475e",
+  "decision": "reviewed and adopted with hardening: export looksLikeSecret per spec, recursive/all-field scan, drop any value field, defensive read",
+  "files-authored": [
+    "orchestrator/secret-reference-registry.ts",
+    "tests/d11-secretref.test.ts"
+  ]
+}

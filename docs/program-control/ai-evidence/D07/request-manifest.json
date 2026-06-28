@@ -1,0 +1,9 @@
+{
+  "task": "D07 agent ownership lock manager",
+  "provider": "openrouter",
+  "model": "deepseek/deepseek-chat",
+  "purpose": "draft path-overlap lock manager (acquire/release/list/isLocked) with TTL + atomic persistence",
+  "input-sensitivity": "none (no secrets, no PII, no .env values)",
+  "redaction": "n/a — prompt and response carry only public design facts and TypeScript",
+  "decision": "review against D07 spec (overlap = same path or prefix dir; expired locks ignored; same-owner re-acquire ok), then adopt with edits to match repo conventions (writeJsonAtomic from ../lib/atomic, node: imports)"
+}

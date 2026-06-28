@@ -1,0 +1,9 @@
+{
+  "task": "D05 scoped settings/policy registry",
+  "provider": "openrouter",
+  "model": "deepseek/deepseek-chat",
+  "purpose": "draft type model + scoped getEffective resolution algorithm + edge-case checklist",
+  "input-sensitivity": "none (no secrets; design-only prompt)",
+  "redaction": "n/a",
+  "decision": "reviewed draft; adopted scope precedence (project>device>global>default) and the type model. REJECTED draft's require()-based load (wrong for ESNext/bundler -> use fs.readFileSync), REJECTED writeJsonAtomic(...).catch() (helper is synchronous, returns void), REJECTED the empty-global ensureLoaded heuristic (use explicit loaded flag), and hardened setSetting to validate scope/target instead of silent no-op. Final module hand-written."
+}

@@ -27,6 +27,11 @@ import { verifyIdToken, googleConfigured, googleClientId } from "./auth/google";
 import * as users from "./auth/users";
 import * as flags from "./autopilot/flags-store";
 import { scanRepos, scanReposSafe, registerRepo } from "./orchestrator/repo-registry";
+import * as settingsStore from "./orchestrator/settings-store";
+import * as lockMgr from "./orchestrator/lock-manager";
+import * as branchReg from "./orchestrator/branch-registry";
+import * as deviceReg from "./orchestrator/device-registry";
+import * as secretRefs from "./orchestrator/secret-reference-registry";
 
 const ORCH_STARTED = Date.now();
 const CONTRACT_VERSION_ORCH = "v0.1";
@@ -210,6 +215,13 @@ app.get("/api/orch/risk", requireAdmin, (req, res) => res.json(flags.isEnabled("
 app.post("/api/orch/repos/register", requireAdmin, (req, res) => {
   res.json({ ok: true, repos: registerRepo(String((req.body || {}).path || "")) });
 });
+// Wave-2 registries (admin-gated, Veridian-scoped). Read endpoints; writes minimal.
+app.get("/api/orch/settings", requireAdmin, (req, res) => res.json(settingsStore.listSettings()));
+app.get("/api/orch/locks", requireAdmin, (req, res) => res.json(lockMgr.listLocks()));
+app.get("/api/orch/branches", requireAdmin, (req, res) => res.json(branchReg.listBranches()));
+app.get("/api/orch/worktrees", requireAdmin, (req, res) => res.json(branchReg.listWorktrees()));
+app.get("/api/orch/devices", requireAdmin, (req, res) => res.json(deviceReg.listDevices()));
+app.get("/api/orch/secret-refs", requireAdmin, (req, res) => res.json(secretRefs.listRefs())); // metadata only — never values
 app.post("/api/admin/users", requireAdmin, (req, res) => {
   try {
     const { email, role, note } = req.body || {};

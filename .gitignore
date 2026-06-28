@@ -58,3 +58,7 @@ test_*.ps1
 *_debug.ps1
 feature-flags.json
 registered-repos.json
+orchestrator-settings.json
+orchestrator-locks.json
+secret-references.json
+devices.json
