@@ -75,3 +75,6 @@ docs/program-control/ai-evidence/**/*openrouter*.md
 /recheck-whitespace.ts
 /trim-analysis.ts
 /whitespace-test.ts
+
+# local android build/verify scratch (logs, screenshots) — never commit
+.android-verify/
