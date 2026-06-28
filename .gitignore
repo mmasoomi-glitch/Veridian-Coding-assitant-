@@ -52,3 +52,7 @@ android/.idea/
 *.apk
 
 quarantine/
+
+# scratch/diagnostic scripts
+test_*.ps1
+*_debug.ps1
