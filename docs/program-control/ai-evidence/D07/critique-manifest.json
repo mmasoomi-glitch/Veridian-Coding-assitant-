@@ -1,0 +1,6 @@
+task: D07 adversarial critique
+provider: openrouter
+model: qwen/qwen3-coder
+purpose: real Big-LLM critique to close self-draft gap
+input-sensitivity: none (code only, no secrets)
+redaction: n/a

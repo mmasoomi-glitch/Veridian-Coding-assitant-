@@ -72,27 +72,48 @@ export function looksLikeSecret(s: unknown): boolean {
   const v = s.trim();
   if (!v) return false;
 
+  // PEM / OpenSSH private key blocks (multiline) — R04 fix.
+  if (/-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/.test(v)) return true;
+  // Connection strings / assignments carrying a password — R04 fix.
+  if (/(password|passwd|pwd)\s*[:=]\s*\S{4,}/i.test(v)) return true;
+  // URI with embedded credentials:  scheme://user:pass@host — R04 fix.
+  if (/[a-z][a-z0-9+.-]*:\/\/[^\s:@/]+:[^\s:@/]+@/i.test(v)) return true;
   // OpenAI / OpenRouter keys: sk-..., sk-or-v1-...
   if (/\bsk-(or-v1-)?[A-Za-z0-9_-]{16,}/.test(v)) return true;
+  // Anthropic keys
+  if (/\bsk-ant-[A-Za-z0-9_-]{16,}/.test(v)) return true;
   // AWS access key id: AKIA + 16 uppercase/digits
   if (/\bAKIA[A-Z0-9]{16}\b/.test(v)) return true;
   // GitHub tokens: ghp_, gho_, ghs_, ghr_, github_pat_
   if (/\b(gh[opsru]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})/.test(v)) return true;
-  // Google OAuth client secret
+  // Google OAuth client secret / API key
   if (/\bGOCSPX-[A-Za-z0-9_-]{10,}/.test(v)) return true;
+  if (/\bAIza[A-Za-z0-9_-]{20,}/.test(v)) return true;
+  // Slack tokens
+  if (/\bxox[baprs]-[A-Za-z0-9-]{10,}/.test(v)) return true;
+  // Stripe live/test secret keys
+  if (/\bsk_(live|test)_[A-Za-z0-9]{16,}/.test(v)) return true;
   // JWT: eyJ... with two dots (header.payload.signature)
   if (/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/.test(v)) return true;
-  // Long opaque base64-ish blob (>=32 contiguous chars), no spaces — likely a value, not a name/path.
-  if (/[A-Za-z0-9+/=_-]{32,}/.test(v) && !/\s/.test(v) && !looksLikePath(v)) return true;
+  // Long high-entropy token (>=32 from the base64/secret alphabet, incl. '/') — a value,
+  // not a name/path. Checked against a single contiguous run so an AWS secret containing
+  // '/' is still caught (R04 fix: do not let a stray slash mark it as a "path").
+  if (/[A-Za-z0-9+/=_-]{32,}/.test(v) && !looksLikePath(v)) return true;
   // Long hex blob (>=32) — keys, hashes used as live secrets
   if (/\b[a-fA-F0-9]{32,}\b/.test(v)) return true;
 
   return false;
 }
 
-// A filesystem path can be long and slashy but is legitimate provenance, not a secret.
+// A real filesystem path is legitimate provenance, not a secret. NARROW on purpose
+// (R04 fix): a mere embedded "/" no longer counts — only a genuine path shape does, so a
+// high-entropy secret that happens to contain "/" is NOT excused as a path.
 function looksLikePath(v: string): boolean {
-  return /[\\/]/.test(v) || /\.(env|json|ya?ml|txt|cfg|ini|pem)$/i.test(v);
+  return (
+    /\.(env|json|ya?ml|txt|cfg|conf|ini|toml|md|pem|key|ppk|pub)$/i.test(v) || // known file extension
+    /^[A-Za-z]:[\\/]/.test(v) ||                                                // Windows drive path
+    /^(\.{0,2}[\\/]|~[\\/])/.test(v)                                            // ./  ../  /  ~/ start
+  );
 }
 
 /** Throw if any string field of `meta` carries something that looks like a real secret. */

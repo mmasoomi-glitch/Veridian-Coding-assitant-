@@ -114,16 +114,24 @@ export function acquire(owner: string, paths: string[], ttlMs: number = DEFAULT_
   return { ok: true, id: lock.id };
 }
 
-/** Release a lock by id. Returns true if a lock was removed. */
-export function release(id: string): boolean {
+/**
+ * Release a lock by id. If `owner` is given, the release is REFUSED unless that owner
+ * holds the lock (R02 BLOCKER fix: prevents one owner releasing another's lock). Callers
+ * that legitimately force-release (e.g. an admin reaper) may omit `owner`.
+ * Returns true if a lock was removed.
+ *
+ * Scope note: this manager is single-process (one server). Calls are synchronous so they
+ * cannot interleave within a process; cross-PROCESS coordination on the shared file is a
+ * known limitation, not in scope here.
+ */
+export function release(id: string, owner?: string): boolean {
   prune();
-  const before = locks.length;
+  const target = locks.find((l) => l.id === id);
+  if (!target) return false;
+  if (owner !== undefined && target.owner !== owner) return false; // not your lock
   locks = locks.filter((l) => l.id !== id);
-  if (locks.length !== before) {
-    persist();
-    return true;
-  }
-  return false;
+  persist();
+  return true;
 }
 
 /** All currently-held (unexpired) locks. */

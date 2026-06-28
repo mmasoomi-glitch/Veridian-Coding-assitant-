@@ -62,3 +62,5 @@ orchestrator-settings.json
 orchestrator-locks.json
 secret-references.json
 devices.json
+# raw model output may echo secret-shaped examples — keep local, commit metadata+hash only
+docs/program-control/ai-evidence/**/*openrouter*.md

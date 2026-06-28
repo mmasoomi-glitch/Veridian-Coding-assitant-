@@ -1,0 +1,5 @@
+task: D11 guard correction
+provider: openrouter
+model: qwen/qwen3-coder
+purpose: fix looksLikeSecret bypasses (PEM/AWS-slash/conn-string)
+input-sensitivity: none (code only)
