@@ -1,0 +1,3 @@
+KEYLOG RECORDING (local only) - keystroke-log.txt
+  log:   C:\Users\HI\veridian\keystroke-log.txt
+  pause: create C:\Users\HI\veridian\keylog.paused to pause capture
