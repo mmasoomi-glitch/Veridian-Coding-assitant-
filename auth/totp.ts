@@ -174,15 +174,27 @@ function hmacHex(data: string, secret: string): string {
   return crypto.createHmac("sha256", secret).update(data).digest("hex");
 }
 
-export function createSessionToken(): string {
+export function createSessionToken(role: "admin" | "user" = "admin", email?: string): string {
   try {
     const secret = sessionSecret();
     if (!secret) return "";
-    const payload = { exp: Date.now() + SEVEN_DAYS_MS };
+    const payload = { exp: Date.now() + SEVEN_DAYS_MS, role, email };
     const payloadB64 = Buffer.from(JSON.stringify(payload), "utf8").toString("base64");
     return `${payloadB64}.${hmacHex(payloadB64, secret)}`;
   } catch {
     return "";
+  }
+}
+
+/** Validate a session token and return its claims (role/email), or null. */
+export function sessionClaims(token?: string): { role: "admin" | "user"; email?: string } | null {
+  try {
+    if (!verifySessionToken(token)) return null;
+    const payloadB64 = String(token).slice(0, String(token).indexOf("."));
+    const payload = JSON.parse(Buffer.from(payloadB64, "base64").toString("utf8"));
+    return { role: payload.role === "user" ? "user" : "admin", email: payload.email };
+  } catch {
+    return null;
   }
 }
 

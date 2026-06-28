@@ -27,6 +27,7 @@ totp-config.json
 totp-config.json.superseded
 veridian.cred
 veridian.cred.*
+auth-users.json
 clip-sync.json
 clip-counts.json
 ask-history.json

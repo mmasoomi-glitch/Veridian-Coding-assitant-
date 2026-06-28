@@ -12,6 +12,7 @@
 // same endpoint accepts their tokens. No code change.
 
 import crypto from "node:crypto";
+import { isAllowed, roleFor, type Role } from "./users";
 
 const JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs";
 const JWKS_TTL_MS = 60 * 60 * 1000;
@@ -69,6 +70,7 @@ async function getJwks(): Promise<{ keys: any[] }> {
 export interface GoogleResult {
   ok: boolean;
   email?: string;
+  role?: Role;
   error?: string;
 }
 
@@ -100,10 +102,11 @@ export async function verifyIdToken(idToken: string): Promise<GoogleResult> {
     if (p.email_verified !== true && p.email_verified !== "true") return { ok: false, error: "email not verified" };
 
     const email = String(p.email || "").toLowerCase();
-    const allow = allowedEmails();
-    if (allow.length && !allow.includes(email)) return { ok: false, error: "email not allowed" };
+    // The admin-managed allowlist is the source of truth for who may sign in.
+    // (It is seeded from VERIDIAN_GOOGLE_ALLOWED_EMAILS on first run.)
+    if (!isAllowed(email)) return { ok: false, error: "email not allowed" };
 
-    return { ok: true, email };
+    return { ok: true, email, role: roleFor(email) || "user" };
   } catch {
     return { ok: false, error: "verify failed" };
   }

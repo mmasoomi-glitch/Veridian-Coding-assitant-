@@ -24,6 +24,7 @@ import { saveScratch, getScratch } from "./autopilot/scratch-store";
 import * as totp from "./auth/totp";
 import * as vault from "./auth/vault";
 import { verifyIdToken, googleConfigured, googleClientId } from "./auth/google";
+import * as users from "./auth/users";
 import { ask, askHistory } from "./autopilot/ai-ask";
 import * as shots from "./autopilot/screenshots-store";
 import * as todos from "./autopilot/todo-store";
@@ -80,18 +81,29 @@ app.use((req, res, next) => {
 function isLocalReq(req: any): boolean {
   return ["localhost", "127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.hostname) || String(req.ip || "").includes("127.0.0.1");
 }
-function setSessionCookie(req: any, res: any): void {
+function setSessionCookie(req: any, res: any, role: "admin" | "user" = "admin", email?: string): void {
   const secure = req.headers["x-forwarded-proto"] === "https" ? "; Secure" : "";
-  res.setHeader("Set-Cookie", `vsess=${encodeURIComponent(totp.createSessionToken())}; HttpOnly; Path=/; Max-Age=604800; SameSite=Lax${secure}`);
+  res.setHeader("Set-Cookie", `vsess=${encodeURIComponent(totp.createSessionToken(role, email))}; HttpOnly; Path=/; Max-Age=604800; SameSite=Lax${secure}`);
+}
+
+// Gate: only a valid ADMIN session (TOTP holder, or a Google user with admin role)
+// may manage the login allowlist.
+function requireAdmin(req: any, res: any, next: any): void {
+  const claims = totp.sessionClaims(getCookie(req, "vsess"));
+  if (!claims || claims.role !== "admin") return res.status(403).json({ error: "admin only" });
+  next();
 }
 
 app.get("/api/auth/status", (req, res) => {
   const lock = totp.lockState();
   const google = googleConfigured();
   const cloudTotp = totp.cloudTotpAvailable();
+  const claims = totp.sessionClaims(getCookie(req, "vsess"));
   res.json({
     required: totp.authRequired(),
     authed: totp.verifySessionToken(getCookie(req, "vsess")),
+    role: claims?.role || null,              // "admin" | "user" | null — UI shows panel for admin
+    email: claims?.email || null,
     configured: totp.isConfigured(),         // a local DPAPI vault (passphrase+TOTP) exists
     // First-run setup only applies to the local vault path. The cloud uses Google
     // and/or env TOTP, so it never shows the passphrase-setup screen.
@@ -114,8 +126,8 @@ app.post("/api/auth/google", async (req, res) => {
   const idToken = String((req.body || {}).idToken || (req.body || {}).credential || "");
   const result = await verifyIdToken(idToken);
   if (!result.ok) return res.status(401).json({ ok: false, error: "google sign-in rejected" });
-  setSessionCookie(req, res);
-  res.json({ ok: true, email: result.email });
+  setSessionCookie(req, res, result.role === "admin" ? "admin" : "user", result.email);
+  res.json({ ok: true, email: result.email, role: result.role });
 });
 
 // First-run: create the strong login (master passphrase + TOTP). Local-only so a
@@ -154,6 +166,25 @@ app.post("/api/auth/login", async (req, res) => {
 app.post("/api/auth/logout", (req, res) => {
   res.setHeader("Set-Cookie", "vsess=; HttpOnly; Path=/; Max-Age=0");
   res.json({ ok: true });
+});
+
+// --- Admin panel: manage who may sign in (admin = TOTP holder, or an admin-role
+// Google user). All gated by requireAdmin. ---
+app.get("/api/admin/users", requireAdmin, (req, res) => res.json(users.listUsers()));
+app.post("/api/admin/users", requireAdmin, (req, res) => {
+  try {
+    const { email, role, note } = req.body || {};
+    const by = totp.sessionClaims(getCookie(req, "vsess"))?.email || "admin";
+    const list = users.addUser({ email: String(email || ""), role: role === "admin" ? "admin" : "user", note, addedBy: by });
+    res.json({ ok: true, users: list });
+  } catch (e: any) {
+    res.status(400).json({ ok: false, error: e?.message || "could not add user" });
+  }
+});
+app.delete("/api/admin/users/:email", requireAdmin, (req, res) => {
+  const out = users.removeUser(String(req.params.email || ""));
+  if (!out.ok) return res.status(400).json({ ok: false, error: out.error, users: out.users });
+  res.json({ ok: true, users: out.users });
 });
 
 // Helper to read database

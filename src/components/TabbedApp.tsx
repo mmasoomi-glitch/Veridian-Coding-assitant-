@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { LayoutDashboard, Clipboard, MessageSquare, Image, ListTodo, Settings as SettingsIcon, Keyboard } from "lucide-react";
+import { LayoutDashboard, Clipboard, MessageSquare, Image, ListTodo, Settings as SettingsIcon, Keyboard, ShieldCheck } from "lucide-react";
 import App from "../App";
 import ClipboardTab from "./ClipboardTab";
 import AiAskTab from "./AiAskTab";
@@ -8,9 +8,12 @@ import ScreenshotsTab from "./ScreenshotsTab";
 import TodoTab from "./TodoTab";
 import SettingsTab from "./SettingsTab";
 import KeyloggerTab from "./KeyloggerTab";
+import AdminPanel from "./AdminPanel";
 import BurnoutNudge from "./BurnoutNudge";
 
-const TABS = [
+type TabDef = { id: string; label: string; Icon: typeof LayoutDashboard };
+
+const TABS: TabDef[] = [
   { id: "dashboard", label: "Dashboard", Icon: LayoutDashboard },
   { id: "clipboard", label: "Clipboard", Icon: Clipboard },
   { id: "ask", label: "AI Ask", Icon: MessageSquare },
@@ -20,8 +23,33 @@ const TABS = [
   { id: "settings", label: "Settings", Icon: SettingsIcon }
 ];
 
+// The Access tab is appended only for admins (see role gating below).
+const ACCESS_TAB: TabDef = { id: "access", label: "Access", Icon: ShieldCheck };
+
 export default function TabbedApp({ apiBase }: { apiBase: string }) {
   const [tab, setTab] = useState("dashboard");
+  const [role, setRole] = useState<"admin" | "user" | null>(null);
+
+  // Fetch the session role once so the Access tab can be shown only to admins.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch(`${apiBase}/api/auth/status`, { credentials: "include" });
+        if (!r.ok) return;
+        const j = await r.json();
+        if (!cancelled && (j?.role === "admin" || j?.role === "user")) setRole(j.role);
+      } catch {
+        /* role stays null -> Access tab hidden */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [apiBase]);
+
+  const isAdmin = role === "admin";
+  const tabs = isAdmin ? [...TABS, ACCESS_TAB] : TABS;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -29,7 +57,7 @@ export default function TabbedApp({ apiBase }: { apiBase: string }) {
       <div className="sticky top-0 z-40 bg-slate-950/90 backdrop-blur-xl border-b border-slate-800 px-4">
         <div className="flex items-center gap-1 overflow-x-auto py-2">
           <span className="text-emerald-400 font-bold text-sm mr-3 pl-1 tracking-tight whitespace-nowrap">◆ Veridian</span>
-          {TABS.map(({ id, label, Icon }) => (
+          {tabs.map(({ id, label, Icon }) => (
             <button
               key={id}
               onClick={() => setTab(id)}
@@ -66,6 +94,7 @@ export default function TabbedApp({ apiBase }: { apiBase: string }) {
               {tab === "todo" && <TodoTab apiBase={apiBase} />}
               {tab === "keylog" && <KeyloggerTab apiBase={apiBase} />}
               {tab === "settings" && <SettingsTab apiBase={apiBase} />}
+              {tab === "access" && isAdmin && <AdminPanel apiBase={apiBase} />}
             </div>
           )}
         </motion.div>
