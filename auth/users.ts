@@ -1,13 +1,17 @@
-// Admin-managed login allowlist (the "who is who" the TOTP admin controls).
+// Admin-managed login allowlist + team model.
 //
-// Model: whoever holds the cloud TOTP secret is the ADMIN. The admin manages this
-// store of users who are allowed to sign in with Google. A Google login is only
-// accepted if the email is in this store; the role here decides whether that user
-// is an "admin" (also gets the panel) or a plain "user".
+// Model:
+//   - The OWNER (afaqsubs@gmail.com by default) is a PERMANENT admin — always
+//     allowed, always admin, can never be removed or demoted. This is the
+//     guaranteed "one-man army" baseline: even with an empty/missing store, the
+//     owner can always get in.
+//   - Whoever holds the cloud TOTP secret authenticates as admin too.
+//   - The admin (the developer) curates the TEAM: additional emails allowed to sign
+//     in with Google, each as "admin" or "user". With no team members added, it's
+//     just the owner — solo. Add members to turn it into a team.
 //
-// Persisted to auth-users.json (atomic write, git-ignored). Seeded once from
-// VERIDIAN_GOOGLE_ALLOWED_EMAILS (those bootstrap emails become admins) so the
-// owner can get in before anyone has been added by hand.
+// Persisted to auth-users.json (atomic, git-ignored), seeded from
+// VERIDIAN_OWNER_EMAIL/VERIDIAN_GOOGLE_ALLOWED_EMAILS on first run.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -23,6 +27,7 @@ export interface AuthUser {
   note?: string;
   addedBy?: string;
   addedAt: string;
+  owner?: boolean; // true for the permanent owner (UI badge; never removable)
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -31,6 +36,12 @@ export function normalizeEmail(e: string): string {
 }
 export function isValidEmail(e: string): boolean {
   return EMAIL_RE.test(normalizeEmail(e));
+}
+
+// The permanent owner. Hardcoded default; overridable via env if ever needed.
+export const OWNER_EMAIL = normalizeEmail(process.env.VERIDIAN_OWNER_EMAIL || "afaqsubs@gmail.com");
+export function isOwner(email: string): boolean {
+  return normalizeEmail(email) === OWNER_EMAIL;
 }
 
 function readRaw(): AuthUser[] {
@@ -42,43 +53,73 @@ function readRaw(): AuthUser[] {
   }
 }
 
-function write(users: AuthUser[]): void {
+function writeRaw(users: AuthUser[]): void {
   writeJsonAtomic(FILE, users);
 }
 
-// Seed admins from the env allowlist the first time, so the owner can always log in.
-function ensureSeeded(): AuthUser[] {
-  if (fs.existsSync(FILE)) return readRaw();
-  const seed = (process.env.VERIDIAN_GOOGLE_ALLOWED_EMAILS || "")
-    .split(",")
-    .map(normalizeEmail)
-    .filter(isValidEmail);
-  const now = new Date().toISOString();
-  const users: AuthUser[] = seed.map((email) => ({ email, role: "admin", note: "seeded from env", addedBy: "system", addedAt: now }));
-  if (users.length) write(users);
+// Load the store, guaranteeing the owner is present as an admin (persisting that
+// fix if needed) and folding in any env-seeded emails on first run.
+function load(): AuthUser[] {
+  let users = readRaw();
+  let changed = false;
+
+  // First-run seed from env (besides the owner).
+  if (!fs.existsSync(FILE)) {
+    const seed = (process.env.VERIDIAN_GOOGLE_ALLOWED_EMAILS || "")
+      .split(",")
+      .map(normalizeEmail)
+      .filter((e) => isValidEmail(e) && e !== OWNER_EMAIL);
+    const now = new Date().toISOString();
+    users = seed.map((email) => ({ email, role: "admin" as Role, note: "seeded from env", addedBy: "system", addedAt: now }));
+    changed = true;
+  }
+
+  // Guarantee the owner row exists, is admin, and is flagged.
+  const owner = users.find((u) => u.email === OWNER_EMAIL);
+  if (!owner) {
+    users.unshift({ email: OWNER_EMAIL, role: "admin", note: "owner (default admin)", addedBy: "system", addedAt: new Date().toISOString(), owner: true });
+    changed = true;
+  } else if (owner.role !== "admin" || !owner.owner) {
+    owner.role = "admin";
+    owner.owner = true;
+    changed = true;
+  }
+
+  if (changed) writeRaw(users);
   return users;
 }
 
 export function listUsers(): AuthUser[] {
-  return ensureSeeded().slice().sort((a, b) => a.email.localeCompare(b.email));
+  return load()
+    .map((u) => ({ ...u, owner: u.email === OWNER_EMAIL }))
+    .sort((a, b) => (a.owner ? -1 : b.owner ? 1 : a.email.localeCompare(b.email)));
 }
 
 export function isAllowed(email: string): boolean {
   const e = normalizeEmail(email);
-  return ensureSeeded().some((u) => u.email === e);
+  if (e === OWNER_EMAIL) return true; // owner always allowed
+  return load().some((u) => u.email === e);
 }
 
 export function roleFor(email: string): Role | null {
   const e = normalizeEmail(email);
-  return ensureSeeded().find((u) => u.email === e)?.role || null;
+  if (e === OWNER_EMAIL) return "admin"; // owner always admin
+  return load().find((u) => u.email === e)?.role || null;
 }
 
-/** Add or update a user. Returns the resulting list. Throws on a bad email. */
+/** Team summary: the owner, member list (non-owner), and whether it's solo. */
+export function teamInfo(): { owner: string; members: AuthUser[]; total: number; solo: boolean } {
+  const all = listUsers();
+  const members = all.filter((u) => !u.owner);
+  return { owner: OWNER_EMAIL, members, total: all.length, solo: members.length === 0 };
+}
+
+/** Add or update a team member. The owner is always forced to admin. Throws on a bad email. */
 export function addUser(input: { email: string; role?: Role; note?: string; addedBy?: string }): AuthUser[] {
   const email = normalizeEmail(input.email);
   if (!isValidEmail(email)) throw new Error("invalid email");
-  const role: Role = input.role === "admin" ? "admin" : "user";
-  const users = ensureSeeded();
+  const role: Role = email === OWNER_EMAIL ? "admin" : input.role === "admin" ? "admin" : "user";
+  const users = load();
   const existing = users.find((u) => u.email === email);
   if (existing) {
     existing.role = role;
@@ -86,19 +127,20 @@ export function addUser(input: { email: string; role?: Role; note?: string; adde
   } else {
     users.push({ email, role, note: input.note ? String(input.note) : undefined, addedBy: input.addedBy || "admin", addedAt: new Date().toISOString() });
   }
-  write(users);
+  writeRaw(users);
   return listUsers();
 }
 
-/** Remove a user. Refuses to remove the last remaining admin (lockout guard). */
+/** Remove a member. Refuses to remove the owner or the last admin. */
 export function removeUser(email: string): { ok: boolean; error?: string; users: AuthUser[] } {
   const e = normalizeEmail(email);
-  const users = ensureSeeded();
+  if (e === OWNER_EMAIL) return { ok: false, error: "cannot remove the owner", users: listUsers() };
+  const users = load();
   const target = users.find((u) => u.email === e);
   if (!target) return { ok: false, error: "not found", users: listUsers() };
   if (target.role === "admin" && users.filter((u) => u.role === "admin").length <= 1) {
     return { ok: false, error: "cannot remove the last admin", users: listUsers() };
   }
-  write(users.filter((u) => u.email !== e));
+  writeRaw(users.filter((u) => u.email !== e));
   return { ok: true, users: listUsers() };
 }

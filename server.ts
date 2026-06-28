@@ -171,6 +171,8 @@ app.post("/api/auth/logout", (req, res) => {
 // --- Admin panel: manage who may sign in (admin = TOTP holder, or an admin-role
 // Google user). All gated by requireAdmin. ---
 app.get("/api/admin/users", requireAdmin, (req, res) => res.json(users.listUsers()));
+// Team summary: owner + members + solo/team state ("one-man army" until members added).
+app.get("/api/admin/team", requireAdmin, (req, res) => res.json(users.teamInfo()));
 app.post("/api/admin/users", requireAdmin, (req, res) => {
   try {
     const { email, role, note } = req.body || {};

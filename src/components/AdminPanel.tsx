@@ -4,9 +4,13 @@
 // here can sign in with Google; admins also get this panel.
 //
 // API contract (admin session cookie required, sent with credentials):
-//   GET    /api/admin/users                 -> AuthUser[]
+//   GET    /api/admin/team
+//     -> { owner: string, members: AuthUser[], total: number, solo: boolean }
 //   POST   /api/admin/users { email, role?, note? } -> { ok, users } | 400 { ok:false, error }
 //   DELETE /api/admin/users/:email          -> { ok, users } | 400 { ok:false, error }
+//
+// OWNER + TEAM model: the owner (afaqsubs@gmail.com) is flagged with owner:true,
+// gets a gold "Owner" badge, and cannot be removed (no Remove button shown).
 //
 // Flicker-sensitive: list state only updates when the content actually changes.
 
@@ -19,6 +23,7 @@ import {
   Loader2,
   Crown,
   User as UserIcon,
+  Users,
   AlertTriangle,
 } from "lucide-react";
 
@@ -30,18 +35,30 @@ interface AuthUser {
   note?: string;
   addedBy?: string;
   addedAt: string;
+  owner?: boolean;
 }
 
 // Stable signature so polling / refreshes only re-render when content changes.
 const sig = (xs: AuthUser[]) =>
   xs
-    .map((x) => `${x.email}:${x.role}:${x.note || ""}:${x.addedBy || ""}:${x.addedAt}`)
+    .map(
+      (x) =>
+        `${x.email}:${x.role}:${x.note || ""}:${x.addedBy || ""}:${x.addedAt}:${x.owner ? 1 : 0}`,
+    )
     .join("|");
 
 function fmtDate(ts: string): string {
   const d = new Date(ts);
   if (isNaN(d.getTime())) return "";
   return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
+
+function OwnerBadge() {
+  return (
+    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-400/15 text-amber-200 border border-amber-400/40 text-[10px] font-mono uppercase tracking-wider">
+      <Crown className="h-2.5 w-2.5" /> owner
+    </span>
+  );
 }
 
 function RoleBadge({ role }: { role: Role }) {
@@ -61,7 +78,11 @@ function RoleBadge({ role }: { role: Role }) {
 
 export default function AdminPanel({ apiBase }: { apiBase: string }) {
   const [users, setUsers] = useState<AuthUser[]>([]);
+  const [solo, setSolo] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Best-effort current session email, so the owner's own row can show "(you)".
+  const [meEmail, setMeEmail] = useState<string | null>(null);
 
   // Add-person form state.
   const [email, setEmail] = useState("");
@@ -80,12 +101,20 @@ export default function AdminPanel({ apiBase }: { apiBase: string }) {
     setUsers((prev) => (sig(prev) === sig(next) ? prev : next));
   }, []);
 
+  // Load the team: members (with owner flags) + solo status. Only updates state
+  // when content actually changes, to avoid flicker on poll/refresh.
   const load = useCallback(async () => {
     try {
-      const r = await fetch(`${apiBase}/api/admin/users`, { credentials: "include" });
+      const r = await fetch(`${apiBase}/api/admin/team`, { credentials: "include" });
       if (!r.ok) return;
-      const next = (await r.json()) as AuthUser[];
-      applyUsers(next);
+      const j = (await r.json()) as {
+        owner?: string;
+        members?: AuthUser[];
+        total?: number;
+        solo?: boolean;
+      };
+      if (Array.isArray(j.members)) applyUsers(j.members);
+      if (typeof j.solo === "boolean") setSolo((prev) => (prev === j.solo ? prev : j.solo!));
     } catch {
       /* offline; ignore */
     } finally {
@@ -96,6 +125,24 @@ export default function AdminPanel({ apiBase }: { apiBase: string }) {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Best-effort: learn the current session email so we can mark the owner "(you)".
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch(`${apiBase}/api/auth/status`, { credentials: "include" });
+        if (!r.ok) return;
+        const j = (await r.json()) as { email?: string };
+        if (!cancelled && typeof j?.email === "string") setMeEmail(j.email);
+      } catch {
+        /* email stays null -> "(you)" simply not shown */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [apiBase]);
 
   const addPerson = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -118,8 +165,8 @@ export default function AdminPanel({ apiBase }: { apiBase: string }) {
         setEmail("");
         setNote("");
         setRole("user");
-        if (Array.isArray(j.users)) applyUsers(j.users);
-        else await load();
+        // Re-fetch the team so owner flags + solo status stay accurate.
+        await load();
       } else {
         setAddError(j?.error || "could not add this person");
       }
@@ -141,8 +188,8 @@ export default function AdminPanel({ apiBase }: { apiBase: string }) {
       const j = await r.json().catch(() => ({}));
       if (r.ok && j?.ok) {
         setConfirmEmail(null);
-        if (Array.isArray(j.users)) applyUsers(j.users);
-        else await load();
+        // Re-fetch the team so owner flags + solo status stay accurate.
+        await load();
       } else {
         setRowError({ email: addr, msg: j?.error || "could not remove this person" });
       }
@@ -165,6 +212,42 @@ export default function AdminPanel({ apiBase }: { apiBase: string }) {
           also get this panel.
         </p>
       </div>
+
+      {/* Team status banner */}
+      <AnimatePresence mode="wait">
+        {solo === true ? (
+          <motion.div
+            key="solo"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3, ease: "easeInOut" }}
+            className="flex items-start gap-2.5 bg-slate-800/40 border border-slate-700/60 rounded-lg px-3 py-2.5"
+          >
+            <UserIcon className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />
+            <div>
+              <div className="text-xs font-bold text-slate-200">Solo — one-man army</div>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                You&apos;re the only one with access. Add teammates below to collaborate.
+              </p>
+            </div>
+          </motion.div>
+        ) : solo === false ? (
+          <motion.div
+            key="team"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3, ease: "easeInOut" }}
+            className="flex items-center gap-2.5 bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-3 py-2.5"
+          >
+            <Users className="h-4 w-4 text-emerald-400 shrink-0" />
+            <div className="text-xs font-bold text-emerald-200">
+              Team — {users.length} member{users.length === 1 ? "" : "s"}
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
 
       {/* Add-person form */}
       <form
@@ -251,9 +334,12 @@ export default function AdminPanel({ apiBase }: { apiBase: string }) {
                 >
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-xs font-mono text-slate-100 truncate">{u.email}</span>
-                    <RoleBadge role={u.role} />
+                    {u.owner && meEmail && u.email === meEmail && (
+                      <span className="text-[10px] font-mono text-slate-500">(you)</span>
+                    )}
+                    {u.owner ? <OwnerBadge /> : <RoleBadge role={u.role} />}
                     <div className="flex-1" />
-                    {confirmEmail === u.email ? (
+                    {u.owner ? null : confirmEmail === u.email ? (
                       <span className="flex items-center gap-2 text-[11px] font-mono">
                         <span className="text-slate-400">Remove?</span>
                         <button

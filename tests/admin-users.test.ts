@@ -12,15 +12,19 @@ const FILE = path.join(process.cwd(), "auth-users.json");
 const bak = fs.existsSync(FILE) ? fs.readFileSync(FILE, "utf8") : null;
 try { if (fs.existsSync(FILE)) fs.unlinkSync(FILE); } catch {}
 
-process.env.VERIDIAN_GOOGLE_ALLOWED_EMAILS = "afaqsubs@gmail.com";
+// No env allowlist on purpose: prove the owner is a HARDCODED default admin.
+delete process.env.VERIDIAN_GOOGLE_ALLOWED_EMAILS;
 process.env.AUTH_SESSION_SECRET = "test-session-secret-xyz";
 
 const users = await import("../auth/users");
 const totp = await import("../auth/totp");
 
-// ---- seeding ----
-ok("owner email seeded as admin from env", users.roleFor("afaqsubs@gmail.com") === "admin");
-ok("owner is allowed", users.isAllowed("afaqsubs@gmail.com") === true);
+// ---- owner is the permanent default admin (one-man army baseline) ----
+ok("OWNER_EMAIL defaults to afaqsubs@gmail.com", users.OWNER_EMAIL === "afaqsubs@gmail.com");
+ok("owner is admin with NO env config", users.roleFor("afaqsubs@gmail.com") === "admin");
+ok("owner is allowed with NO env config", users.isAllowed("afaqsubs@gmail.com") === true);
+ok("owner flagged as owner in list", users.listUsers().some((u) => u.email === "afaqsubs@gmail.com" && u.owner === true));
+ok("starts solo (one-man army)", users.teamInfo().solo === true && users.teamInfo().total === 1);
 ok("random email not allowed", users.isAllowed("stranger@gmail.com") === false);
 
 // ---- admin adds users ----
@@ -35,11 +39,17 @@ users.addUser({ email: "teammate@example.com", role: "admin" });
 ok("user promoted to admin", users.roleFor("teammate@example.com") === "admin");
 ok("listUsers returns all", users.listUsers().length === 2);
 
-// ---- removal guards ----
+// ---- team state flips when a member is added ----
+ok("becomes a team when a member is added", users.teamInfo().solo === false && users.teamInfo().members.length >= 1);
+
+// ---- removal + owner guards ----
 const rem = users.removeUser("teammate@example.com");
-ok("can remove a non-last admin", rem.ok === true);
-const remLast = users.removeUser("afaqsubs@gmail.com");
-ok("cannot remove the LAST admin", remLast.ok === false && /last admin/.test(remLast.error || ""));
+ok("can remove a normal member", rem.ok === true);
+const remOwner = users.removeUser("afaqsubs@gmail.com");
+ok("cannot remove the OWNER", remOwner.ok === false && /owner/.test(remOwner.error || ""));
+const demote = users.addUser({ email: "afaqsubs@gmail.com", role: "user" });
+ok("owner cannot be demoted below admin", users.roleFor("afaqsubs@gmail.com") === "admin");
+void demote;
 
 // ---- session role round-trip ----
 const adminTok = totp.createSessionToken("admin", "afaqsubs@gmail.com");
