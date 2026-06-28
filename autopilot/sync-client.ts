@@ -67,3 +67,52 @@ export function startSyncClient(
   // push lands after one interval.)
   setInterval(push, intervalMs).unref?.();
 }
+
+/**
+ * Cross-device clipboard sync transport. Every interval it PUSHES this machine's
+ * E2E-encrypted clip blobs to the central server and PULLS everyone else's, handing
+ * the ciphertext to `ingest` (which decrypts locally). Transport only — it never
+ * sees plaintext; `getEntries` returns already-encrypted blobs. No-op without
+ * CENTRAL_URL. (Entries are also empty unless a VERIDIAN_SYNC_KEY is set, so a
+ * misconfigured machine simply syncs nothing.)
+ */
+export function startClipSyncClient(
+  getEntries: () => Array<{ id: string; ts: string; blob: string; preview: string; isSecret: boolean; length: number }>,
+  ingest: (remote: any[]) => void
+): void {
+  const base = process.env.CENTRAL_URL;
+  if (!base) return;
+
+  const machineId = process.env.MACHINE_ID || os.hostname();
+  const intervalMs = parseInt(process.env.SYNC_INTERVAL_MS || "30000", 10);
+  const root = base.replace(/\/+$/, "");
+  const pushUrl = `${root}/api/sync/clip/push`;
+  const pullUrl = `${root}/api/sync/clip/pull?exclude=${encodeURIComponent(machineId)}`;
+
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (process.env.CENTRAL_AUTH) {
+    headers["Authorization"] = `Basic ${Buffer.from(process.env.CENTRAL_AUTH).toString("base64")}`;
+  }
+
+  const tick = async () => {
+    try {
+      const entries = getEntries();
+      if (entries.length) {
+        await fetch(pushUrl, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ machineId, hostname: os.hostname(), entries })
+        });
+      }
+      const res = await fetch(pullUrl, { headers: process.env.CENTRAL_AUTH ? { Authorization: headers["Authorization"] } : {} });
+      if (res.ok) {
+        const remote = await res.json();
+        ingest(Array.isArray(remote) ? remote : []);
+      }
+    } catch {
+      // Network/central failures are silent — never crash the host server.
+    }
+  };
+
+  setInterval(tick, intervalMs).unref?.();
+}

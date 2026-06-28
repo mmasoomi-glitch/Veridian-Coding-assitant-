@@ -1,20 +1,31 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Clipboard, Pin, Search, Trash2, Check, Lock, Loader2, Copy } from "lucide-react";
+import { Clipboard, Pin, Search, Trash2, Check, Lock, Loader2, Copy, Laptop, Network } from "lucide-react";
 
 // Shape returned by the clipboard API (ClipEntry from autopilot/clip-history.ts).
 // Raw values are never sent — only a redacted-safe preview.
+// `origin`/`remote` are present on the unified (cross-device) feed; optional so
+// the same type also models the local-only /history fallback.
 interface ClipEntry {
   id: string;
   ts: string;
   preview: string;
   isSecret: boolean;
   length: number;
+  origin?: string;
+  remote?: boolean;
+}
+
+interface SyncStatus {
+  ready: boolean;
+  remoteCount: number;
+  includesSecrets: boolean;
 }
 
 // Stable signature of a list so polling only re-renders when content meaningfully
 // changes (the owner is flicker-sensitive — ages alone must not churn the DOM).
-const sig = (xs: ClipEntry[]) => xs.map((x) => `${x.id}:${x.isSecret}`).join("|");
+const sig = (xs: ClipEntry[]) =>
+  xs.map((x) => `${x.id}:${x.isSecret}:${x.remote ? 1 : 0}:${x.origin || ""}`).join("|");
 
 function fmtAge(ts: string): string {
   const ms = Date.now() - new Date(ts).getTime();
@@ -34,17 +45,48 @@ export default function ClipboardTab({ apiBase }: { apiBase: string }) {
   const [openSuggest, setOpenSuggest] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [clearing, setClearing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ---- loaders (signature-diffed, all wrapped) ----
+  // Prefer the cross-device unified feed; fall back to local-only history if it
+  // errors or is empty (e.g. when sync is off) so the list always works.
   const loadHistory = useCallback(async () => {
     try {
-      const r = await fetch(`${apiBase}/api/clipboard/history`);
-      if (!r.ok) return;
-      const next: ClipEntry[] = await r.json();
-      if (!Array.isArray(next)) return;
-      setHistory((prev) => (sig(prev) === sig(next) ? prev : next));
+      let next: ClipEntry[] | null = null;
+      try {
+        const ru = await fetch(`${apiBase}/api/clipboard/unified`);
+        if (ru.ok) {
+          const u = await ru.json();
+          if (Array.isArray(u) && u.length > 0) next = u;
+        }
+      } catch { /* fall through to local history */ }
+      if (!next) {
+        const r = await fetch(`${apiBase}/api/clipboard/history`);
+        if (!r.ok) return;
+        const local = await r.json();
+        if (!Array.isArray(local)) return;
+        next = local;
+      }
+      setHistory((prev) => (sig(prev) === sig(next!) ? prev : next!));
     } catch { /* offline; ignore */ }
+  }, [apiBase]);
+
+  const loadSyncStatus = useCallback(async () => {
+    try {
+      const r = await fetch(`${apiBase}/api/clipboard/sync-status`);
+      if (!r.ok) return;
+      const next: SyncStatus = await r.json();
+      if (!next || typeof next.ready !== "boolean") return;
+      setSyncStatus((prev) =>
+        prev &&
+        prev.ready === next.ready &&
+        prev.remoteCount === next.remoteCount &&
+        prev.includesSecrets === next.includesSecrets
+          ? prev
+          : next
+      );
+    } catch { /* ignore */ }
   }, [apiBase]);
 
   const loadTop = useCallback(async () => {
@@ -60,9 +102,10 @@ export default function ClipboardTab({ apiBase }: { apiBase: string }) {
   useEffect(() => {
     loadHistory();
     loadTop();
-    const id = setInterval(() => { loadHistory(); loadTop(); }, 15000);
+    loadSyncStatus();
+    const id = setInterval(() => { loadHistory(); loadTop(); loadSyncStatus(); }, 15000);
     return () => clearInterval(id);
-  }, [loadHistory, loadTop]);
+  }, [loadHistory, loadTop, loadSyncStatus]);
 
   // ---- autocomplete (debounced) ----
   useEffect(() => {
@@ -125,6 +168,19 @@ export default function ClipboardTab({ apiBase }: { apiBase: string }) {
     </span>
   );
 
+  // Chip showing which device a remote entry came from. Local entries render a
+  // subtle "this PC" marker instead.
+  const OriginChip = ({ e }: { e: ClipEntry }) =>
+    e.remote ? (
+      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300 text-[10px] font-mono">
+        <Network className="h-2.5 w-2.5" /> from {e.origin || "remote"}
+      </span>
+    ) : (
+      <span className="inline-flex items-center gap-1 text-slate-600 text-[10px] font-mono">
+        <Laptop className="h-2.5 w-2.5" /> this PC
+      </span>
+    );
+
   const CopiedBadge = ({ id }: { id: string }) =>
     copiedId === id ? (
       <motion.span
@@ -142,6 +198,36 @@ export default function ClipboardTab({ apiBase }: { apiBase: string }) {
       <div className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-wider text-cyan-400">
         <Clipboard className="h-3.5 w-3.5" /> Clipboard
       </div>
+
+      {/* Cross-device sync status */}
+      <AnimatePresence initial={false} mode="wait">
+        {syncStatus && (
+          <motion.div
+            key={syncStatus.ready ? "sync-on" : "sync-off"}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.35, ease: "easeInOut" }}
+            className="flex items-center gap-2 text-[10px] font-mono"
+          >
+            {syncStatus.ready ? (
+              <>
+                <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
+                <span className="text-emerald-300">
+                  Cross-device sync on · {syncStatus.remoteCount} from other device{syncStatus.remoteCount === 1 ? "" : "s"}
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="h-2 w-2 rounded-full bg-slate-600" />
+                <span className="text-slate-500">
+                  Local only — set VERIDIAN_SYNC_KEY to sync across devices
+                </span>
+              </>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Pinned / most used */}
       <div>
@@ -252,6 +338,7 @@ export default function ClipboardTab({ apiBase }: { apiBase: string }) {
                     <CopiedBadge id={e.id} />
                   </div>
                   <div className="flex items-center gap-2 mt-0.5 pl-5 text-[10px] font-mono text-slate-500">
+                    <OriginChip e={e} />
                     {e.isSecret && <SecretChip />}
                     <span>{e.length} ch</span>
                     <span>· {fmtAge(e.ts)}</span>

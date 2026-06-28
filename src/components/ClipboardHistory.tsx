@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { ClipboardList, Copy, Check, Loader2 } from "lucide-react";
+import { ClipboardList, Copy, Check, Loader2, Network, Laptop } from "lucide-react";
 
 interface ClipEntry {
   id: string;
@@ -8,13 +8,22 @@ interface ClipEntry {
   preview: string;
   isSecret: boolean;
   length: number;
+  // Present on the unified (cross-device) feed; optional for the local fallback.
+  origin?: string;
+  remote?: boolean;
+}
+
+interface SyncStatus {
+  ready: boolean;
+  remoteCount: number;
+  includesSecrets: boolean;
 }
 
 // Signature of the meaningful content — used to skip setState when a poll
 // returns identical data, so the list doesn't flicker/re-animate (the owner is
 // sensitive to jarring refreshes).
 function sig(xs: ClipEntry[]): string {
-  return xs.map((x) => `${x.id}:${x.preview}:${x.isSecret}`).join("|");
+  return xs.map((x) => `${x.id}:${x.preview}:${x.isSecret}:${x.remote ? 1 : 0}:${x.origin || ""}`).join("|");
 }
 
 function fmtAge(ts: string): string {
@@ -33,26 +42,62 @@ export default function ClipboardHistory({ apiBase }: { apiBase: string }) {
   const [items, setItems] = useState<ClipEntry[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Prefer the cross-device unified feed; fall back to local-only history if it
+  // errors or is empty (e.g. when sync is off) so the list always works.
   const load = useCallback(async () => {
     try {
-      const r = await fetch(`${apiBase}/api/clipboard/history`);
-      if (!r.ok) return;
-      const next: ClipEntry[] = await r.json();
-      if (!Array.isArray(next)) return;
+      let next: ClipEntry[] | null = null;
+      try {
+        const ru = await fetch(`${apiBase}/api/clipboard/unified`);
+        if (ru.ok) {
+          const u = await ru.json();
+          if (Array.isArray(u) && u.length > 0) next = u;
+        }
+      } catch {
+        /* fall through to local history */
+      }
+      if (!next) {
+        const r = await fetch(`${apiBase}/api/clipboard/history`);
+        if (!r.ok) return;
+        const local = await r.json();
+        if (!Array.isArray(local)) return;
+        next = local;
+      }
       // Only update when the content signature changes — avoids flicker.
-      setItems((prev) => (sig(prev) === sig(next) ? prev : next));
+      setItems((prev) => (sig(prev) === sig(next!) ? prev : next!));
     } catch {
       /* offline; ignore */
     }
   }, [apiBase]);
 
+  const loadSyncStatus = useCallback(async () => {
+    try {
+      const r = await fetch(`${apiBase}/api/clipboard/sync-status`);
+      if (!r.ok) return;
+      const next: SyncStatus = await r.json();
+      if (!next || typeof next.ready !== "boolean") return;
+      setSyncStatus((prev) =>
+        prev &&
+        prev.ready === next.ready &&
+        prev.remoteCount === next.remoteCount &&
+        prev.includesSecrets === next.includesSecrets
+          ? prev
+          : next
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [apiBase]);
+
   useEffect(() => {
     load();
-    const id = setInterval(load, 8000);
+    loadSyncStatus();
+    const id = setInterval(() => { load(); loadSyncStatus(); }, 8000);
     return () => clearInterval(id);
-  }, [load]);
+  }, [load, loadSyncStatus]);
 
   useEffect(() => {
     return () => {
@@ -111,6 +156,36 @@ export default function ClipboardHistory({ apiBase }: { apiBase: string }) {
         )}
       </div>
 
+      {/* Cross-device sync status */}
+      <AnimatePresence initial={false} mode="wait">
+        {syncStatus && (
+          <motion.div
+            key={syncStatus.ready ? "sync-on" : "sync-off"}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.35, ease: "easeInOut" }}
+            className="flex items-center gap-2 text-[10px] font-mono"
+          >
+            {syncStatus.ready ? (
+              <>
+                <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
+                <span className="text-emerald-300">
+                  Cross-device sync on · {syncStatus.remoteCount} from other device{syncStatus.remoteCount === 1 ? "" : "s"}
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="h-2 w-2 rounded-full bg-slate-600" />
+                <span className="text-slate-500">
+                  Local only — set VERIDIAN_SYNC_KEY to sync across devices
+                </span>
+              </>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {items.length === 0 ? (
         <p className="text-[11px] text-slate-500 font-mono">Nothing copied yet.</p>
       ) : (
@@ -129,6 +204,15 @@ export default function ClipboardHistory({ apiBase }: { apiBase: string }) {
                 <div className="flex items-center justify-between gap-2">
                   <code className="text-[11px] text-slate-200 font-mono truncate">{it.preview}</code>
                   <div className="flex items-center gap-1.5 shrink-0">
+                    {it.remote ? (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono bg-cyan-500/15 text-cyan-300">
+                        <Network className="h-2.5 w-2.5" /> from {it.origin || "remote"}
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[9px] font-mono text-slate-600">
+                        <Laptop className="h-2.5 w-2.5" /> this PC
+                      </span>
+                    )}
                     {it.isSecret && (
                       <span className="px-1.5 py-0.5 rounded text-[9px] font-mono uppercase bg-red-500/15 text-red-400">
                         secret

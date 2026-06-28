@@ -18,7 +18,8 @@ import { generatePdr, listPdrs, getPdr } from "./autopilot/pdr";
 import * as prompts from "./autopilot/prompts-store";
 import { backupFolder, listBackups, restoreFolder } from "./autopilot/backup";
 import { recordMachine, listMachines, getMachine } from "./autopilot/sync-store";
-import { startSyncClient } from "./autopilot/sync-client";
+import { recordClipBlobs, listClipBlobs } from "./autopilot/clip-sync-store";
+import { startSyncClient, startClipSyncClient } from "./autopilot/sync-client";
 import { saveScratch, getScratch } from "./autopilot/scratch-store";
 import * as totp from "./auth/totp";
 import { ask, askHistory } from "./autopilot/ai-ask";
@@ -567,10 +568,15 @@ app.get("/api/notebook/file/:id", (req, res) => {
   res.sendFile(path.join(process.cwd(), entry.content));
 });
 
-// 4j. Clipboard history (last 50, click-to-restore). Local only.
+// 4j. Clipboard history (click-to-restore). Local history + unified cross-device view.
 app.get("/api/clipboard/history", (req, res) => res.json(clipHistory.list()));
+// Unified newest-first list across this + other machines (remote entries decrypted
+// locally; preview + origin only). Falls back to local-only when sync is off.
+app.get("/api/clipboard/unified", (req, res) => res.json(clipHistory.unifiedList()));
+app.get("/api/clipboard/sync-status", (req, res) => res.json(clipHistory.syncInfo()));
 app.post("/api/clipboard/restore", async (req, res) => {
-  const ok = await clipHistory.restore(String(req.body?.id));
+  // Handles both local and remote (cross-device) entries by id.
+  const ok = await clipHistory.restoreAny(String(req.body?.id));
   res.json({ ok });
 });
 app.post("/api/clipboard/clear", (req, res) => { clipHistory.clear(); res.json({ ok: true }); });
@@ -643,6 +649,13 @@ app.post("/api/restore", async (req, res) => res.json(await restoreFolder(String
 
 // 4n-ii. Central command — multi-machine sync.
 app.post("/api/sync/push", (req, res) => { recordMachine(req.body || {}); res.json({ ok: true }); });
+// Cross-device clipboard: central stores E2E ciphertext only (it has no key).
+app.post("/api/sync/clip/push", (req, res) => {
+  const b = req.body || {};
+  recordClipBlobs(String(b.machineId || ""), String(b.hostname || ""), Array.isArray(b.entries) ? b.entries : []);
+  res.json({ ok: true });
+});
+app.get("/api/sync/clip/pull", (req, res) => res.json(listClipBlobs(String(req.query.exclude || "") || undefined)));
 app.get("/api/sync/machines", (req, res) => res.json(listMachines()));
 app.get("/api/sync/machine/:id", (req, res) => {
   const m = getMachine(req.params.id);
@@ -768,6 +781,12 @@ async function startServer() {
       const shaped = shapeTelemetry(await collectTelemetry());
       return { currentState: shaped.currentState, sessions: listSessions(), waiting: await getWaitingItems() };
     });
+    // Cross-device clipboard memory: push our E2E-encrypted clip blobs and pull
+    // everyone else's (inert unless CENTRAL_URL + VERIDIAN_SYNC_KEY are set).
+    startClipSyncClient(
+      () => clipHistory.exportForSync(),
+      (remote) => { clipHistory.ingestRemote(remote); }
+    );
   });
 }
 

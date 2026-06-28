@@ -17,6 +17,7 @@ import path from "path";
 import crypto from "crypto";
 import { spawn } from "child_process";
 import { writeJsonAtomic } from "../lib/atomic";
+import { encryptToBlob, decryptBlob, syncCryptoReady } from "../lib/sync-crypto";
 
 const FILE = path.join(process.cwd(), "clip-history.json");
 // Sibling file: persistent per-distinct-value counts across all history (survives
@@ -277,17 +278,11 @@ export function suggest(prefix: string, n = 8): ClipEntry[] {
   }
 }
 
-// Restore an entry's raw value to the OS clipboard via PowerShell Set-Clipboard,
-// passing the value through stdin so it never lands on the command line. Secrets
-// are restorable only during the session they were copied (ephemeral cache); a
-// secret aged out of the cache (e.g. after a restart) cannot be restored — by design.
-export function restore(id: string): Promise<boolean> {
+// Put a raw value on the OS clipboard via PowerShell Set-Clipboard, passing it
+// through stdin so it never lands on the command line.
+function setClipboard(value: string): Promise<boolean> {
   return new Promise((resolve) => {
     try {
-      const value =
-        RAW_CACHE.get(id) ||
-        read().find((r) => r.id === id && !r.isSecret)?.value ||
-        "";
       if (!value) return resolve(false);
       const ps = spawn(
         "powershell",
@@ -305,10 +300,155 @@ export function restore(id: string): Promise<boolean> {
   });
 }
 
-// Wipe history (and the frequency counts that back "most used").
+// Restore a LOCAL entry's raw value to the OS clipboard. Secrets are restorable
+// only during the session they were copied (ephemeral cache); a secret aged out of
+// the cache (e.g. after a restart) cannot be restored — by design.
+export function restore(id: string): Promise<boolean> {
+  const value = RAW_CACHE.get(id) || read().find((r) => r.id === id && !r.isSecret)?.value || "";
+  return setClipboard(value);
+}
+
+// ------------------------------------------------------------------------------
+// Cross-device sync (inter-device clipboard memory). The owner's machines share a
+// VERIDIAN_SYNC_KEY; raw values are END-TO-END encrypted here before leaving the
+// device, and decrypted only here on pull. The central server only ever sees
+// ciphertext. All of this is inert unless a sync key is configured.
+// ------------------------------------------------------------------------------
+
+export interface ClipBlobEntry {
+  id: string;
+  ts: string;
+  blob: string;    // E2E ciphertext of the raw value
+  preview: string; // redaction-safe preview (secrets masked)
+  isSecret: boolean;
+  length: number;
+}
+
+// Decrypted remote entries pulled from other machines, keyed by id (ephemeral).
+interface RemoteEntry {
+  id: string;
+  ts: string;
+  raw: string;      // decrypted value, in memory only
+  preview: string;
+  isSecret: boolean;
+  length: number;
+  origin: string;   // source machine hostname
+}
+const REMOTE_CACHE = new Map<string, RemoteEntry>();
+const REMOTE_CAP = 200;
+
+// By default secrets stay on the machine that copied them. Set
+// VERIDIAN_SYNC_CLIP_SECRETS=1 to also sync secrets (safe: they're E2E encrypted).
+function includeSecretsInSync(): boolean {
+  return process.env.VERIDIAN_SYNC_CLIP_SECRETS === "1";
+}
+
+/** True when cross-device clipboard sync is active (a shared key is configured). */
+export function clipSyncReady(): boolean {
+  return syncCryptoReady();
+}
+
+/** Encrypt this device's recent clipboard entries for the central server.
+ *  Returns [] when no sync key is set. Only entries whose raw value is available
+ *  (this session for secrets; on disk for non-secrets) can be exported. */
+export function exportForSync(limit = 50): ClipBlobEntry[] {
+  if (!syncCryptoReady()) return [];
+  const out: ClipBlobEntry[] = [];
+  try {
+    for (const rec of read()) {
+      if (rec.isSecret && !includeSecretsInSync()) continue;
+      const raw = rawFor(rec);
+      if (!raw) continue;
+      const blob = encryptToBlob(raw);
+      if (!blob) continue;
+      out.push({ id: rec.id, ts: rec.ts, blob, preview: rec.preview, isSecret: rec.isSecret, length: rec.length });
+      if (out.length >= limit) break;
+    }
+  } catch (e) {
+    console.error("clip exportForSync failed:", e);
+  }
+  return out;
+}
+
+/** Decrypt remote encrypted entries (from other machines) into the in-memory
+ *  remote cache. Entries that can't be decrypted (wrong/no key) are skipped. */
+export function ingestRemote(entries: any[]): number {
+  if (!syncCryptoReady() || !Array.isArray(entries)) return 0;
+  let n = 0;
+  try {
+    for (const e of entries) {
+      const id = String(e?.id || "");
+      const blob = String(e?.blob || "");
+      if (!id || !blob) continue;
+      const raw = decryptBlob(blob);
+      if (raw == null) continue;
+      REMOTE_CACHE.set(id, {
+        id,
+        ts: String(e?.ts || ""),
+        raw,
+        preview: String(e?.preview || ""),
+        isSecret: Boolean(e?.isSecret),
+        length: Number(e?.length || 0),
+        origin: String(e?.origin || e?.machineId || "remote")
+      });
+      n++;
+    }
+    // Trim oldest if over cap.
+    if (REMOTE_CACHE.size > REMOTE_CAP) {
+      const sorted = [...REMOTE_CACHE.values()].sort((a, b) => (a.ts < b.ts ? 1 : -1));
+      for (const old of sorted.slice(REMOTE_CAP)) REMOTE_CACHE.delete(old.id);
+    }
+  } catch (e) {
+    console.error("clip ingestRemote failed:", e);
+  }
+  return n;
+}
+
+export interface UnifiedClipEntry extends ClipEntry {
+  origin: string;   // "local" or a remote machine hostname
+  remote: boolean;
+}
+
+/** Merged newest-first view of local + remote clipboard entries for the UI.
+ *  Raw values are never included — preview + origin only. */
+export function unifiedList(): UnifiedClipEntry[] {
+  const out: UnifiedClipEntry[] = [];
+  const seen = new Set<string>();
+  try {
+    for (const r of read()) {
+      if (seen.has(r.id)) continue;
+      seen.add(r.id);
+      out.push({ ...toEntry(r), origin: "local", remote: false });
+    }
+    for (const r of REMOTE_CACHE.values()) {
+      if (seen.has(r.id)) continue;
+      seen.add(r.id);
+      out.push({ id: r.id, ts: r.ts, preview: r.preview, isSecret: r.isSecret, length: r.length, origin: r.origin, remote: true });
+    }
+    out.sort((a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0));
+  } catch (e) {
+    console.error("clip unifiedList failed:", e);
+  }
+  return out;
+}
+
+/** Restore any entry (local OR remote) to the OS clipboard by id. */
+export function restoreAny(id: string): Promise<boolean> {
+  const remote = REMOTE_CACHE.get(id);
+  if (remote) return setClipboard(remote.raw);
+  return restore(id);
+}
+
+/** Status for the UI: whether sync is enabled + how many remote entries are cached. */
+export function syncInfo(): { ready: boolean; remoteCount: number; includesSecrets: boolean } {
+  return { ready: syncCryptoReady(), remoteCount: REMOTE_CACHE.size, includesSecrets: includeSecretsInSync() };
+}
+
+// Wipe history (and the frequency counts that back "most used"). Remote cache too.
 export function clear(): void {
   try {
     RAW_CACHE.clear();
+    REMOTE_CACHE.clear();
     write([]);
     writeCounts([]);
   } catch (e) {
