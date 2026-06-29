@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { LayoutDashboard, Clipboard, MessageSquare, Image, ListTodo, Settings as SettingsIcon, Keyboard, ShieldCheck, Gauge } from "lucide-react";
+import { LayoutDashboard, Clipboard, MessageSquare, Image, ListTodo, Settings as SettingsIcon, Keyboard, ShieldCheck, Gauge, Home } from "lucide-react";
 import App from "../App";
+import FocusNow from "./FocusNow";
 import ClipboardTab from "./ClipboardTab";
 import AiAskTab from "./AiAskTab";
 import ScreenshotsTab from "./ScreenshotsTab";
@@ -15,6 +16,7 @@ import BurnoutNudge from "./BurnoutNudge";
 type TabDef = { id: string; label: string; Icon: typeof LayoutDashboard };
 
 const TABS: TabDef[] = [
+  { id: "home", label: "Home", Icon: Home },
   { id: "dashboard", label: "Dashboard", Icon: LayoutDashboard },
   { id: "clipboard", label: "Clipboard", Icon: Clipboard },
   { id: "ask", label: "AI Ask", Icon: MessageSquare },
@@ -29,7 +31,7 @@ const CONTROL_TAB: TabDef = { id: "control", label: "Control Center", Icon: Gaug
 const ACCESS_TAB: TabDef = { id: "access", label: "Access", Icon: ShieldCheck };
 
 export default function TabbedApp({ apiBase }: { apiBase: string }) {
-  const [tab, setTab] = useState("dashboard");
+  const [tab, setTab] = useState("home");
   const [role, setRole] = useState<"admin" | "user" | null>(null);
 
   // Fetch the session role once so the Access tab can be shown only to admins.
@@ -86,6 +88,7 @@ export default function TabbedApp({ apiBase }: { apiBase: string }) {
           exit={{ opacity: 0, y: -8 }}
           transition={{ duration: 0.22, ease: "easeOut" }}
         >
+          {tab === "home" && <FocusNow apiBase={apiBase} />}
           {tab === "dashboard" ? (
             <App />
           ) : (

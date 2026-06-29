@@ -1,0 +1,11 @@
+{
+  "package_id": "MC01",
+  "provider": "openrouter",
+  "model": "deepseek/deepseek-v4-pro",
+  "returned_model": "deepseek/deepseek-v4-pro-20260423",
+  "approved_prefix": "deepseek/deepseek-v4",
+  "ts": "2026-06-29T05:31:18Z",
+  "redaction": "request scanned, no secret transmitted",
+  "response_sha256": "4d34589e18df143df9c8caf03099b357ca03f5787cb0114a4e1d5bb8c7199f9f",
+  "raw_artifact": ".ai-private/MC01-deepseek-raw.md"
+}
