@@ -81,3 +81,5 @@ docs/program-control/ai-evidence/**/*openrouter*.md
 # DeepSeek gateway private raw output — NEVER commit
 .ai-private/
 docs/program-control/ai-evidence/**/*-deepseek-raw.md
+
+__pycache__/
