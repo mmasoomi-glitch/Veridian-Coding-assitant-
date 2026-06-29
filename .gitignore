@@ -78,3 +78,6 @@ docs/program-control/ai-evidence/**/*openrouter*.md
 
 # local android build/verify scratch (logs, screenshots) — never commit
 .android-verify/
+# DeepSeek gateway private raw output — NEVER commit
+.ai-private/
+docs/program-control/ai-evidence/**/*-deepseek-raw.md

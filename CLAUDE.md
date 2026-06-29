@@ -1,5 +1,19 @@
 # Veridian Coding Assistant — Project Guide (for Claude sessions)
 
+> ## ⛔ MANDATORY ENTRY POINT — READ BEFORE ANY WORK
+> Every Claude Code agent MUST read these before writing any feature code:
+> `CLAUDE.md` · `CLOUD.md` · `docs/program-control/MODEL_EXECUTION_POLICY.md` ·
+> `docs/program-control/SKILL_ROUTING_POLICY.md` · `docs/program-control/FEATURE_GATE_POLICY.md` ·
+> `docs/program-control/HANDOFF_MEMORY.md` · `docs/program-control/AGENT_OWNERSHIP.md` ·
+> `docs/program-control/WORK_PACKAGE_BOARD.md`.
+>
+> **Model routing (enforced):** Opus = assess/plan/audit/review/gates. **DeepSeek V4 via the
+> single gateway `scripts/ai/openrouter_deepseek_bundle.py` = the ONLY code author.** Haiku =
+> apply-only disk writer. Anthropic-HTTP = assess-only. No Qwen, no fallback, no substitution.
+> No feature code before the correct skill (`veridian-debug` → `veridian-develop`) and the
+> Feature/Practicality/Blast-Radius gates run. No `git add -A` — use `scripts/git/safe-stage`.
+> Truthful labels only (LOCAL TESTED ≠ RUNTIME VERIFIED ≠ INTEGRATED ≠ DEPLOYED).
+
 This file orients any Claude session working on this repo. Read it first, then read `HANDOFF.md` for the latest timestamped state and the next action.
 
 ## What this is
@@ -30,8 +44,13 @@ Server restart is required for any change to `server.ts` / `vite.config.ts` / fi
 ## Key endpoints
 `/api/telemetry/current`, `/api/ai/summarize`, `/api/desktop/switch`, `/api/desktop/brief(s)`, `/api/waiting`, `/api/autopilot/next`, `/api/autopilot/feedback`, `/api/fleet/projects` (GET/POST), `/api/fleet/run` (POST {mode,desktop?}), `/api/fleet/status`.
 
-## Providers — exploiting the Claude Max plan
-The owner has a **Claude Max ($200) plan**. The cheapest, most powerful brain is the **local Claude Code CLI** (`claude -p --model opus`), which `ai/providers.ts` and `autopilot/fleet.ts` both shell out to. Set `AI_PROVIDER=claude` (and `CLAUDE_MODEL=opus`). No API key, flat-rate. This is the intended "powerful AI" plant point.
+## Providers (current — supersedes any older note in this file)
+- **In-product runtime AI** (`ai/providers.ts`): OpenRouter (key `VERIDIAN_ENV`) or Anthropic
+  HTTP, assess/answer only; honest-disabled when unconfigured. No CLI/subprocess.
+- **Development code authoring**: NOT done by the in-product provider. It goes through the
+  **DeepSeek V4 gateway** (`scripts/ai/openrouter_deepseek_bundle.py`) under
+  MODEL_EXECUTION_POLICY.md. (The earlier "Claude Max CLI / shell out to claude -p" note is
+  obsolete — there is no CLI shell-out.)
 
 ## SAFETY GUARDRAIL (do not remove)
 The autopilot auto-EXECUTES only safe, reversible, local actions and ALWAYS gates anything irreversible/outward-facing (send, delete, publish, push, pay, auth) behind explicit human approval — regardless of confidence. Fleet `full` mode (`bypassPermissions`) is opt-in per project by the owner, never the default. Clipboard secrets are redacted before persist/AI send (`redactSecret` in server.ts).
