@@ -1,0 +1,14 @@
+{
+  "package_id": "FIX-AI-PROVIDER-PIPELINE",
+  "provider": "openrouter",
+  "configured_model": "cohere/north-mini-code:free",
+  "returned_model": "cohere/north-mini-code-20260617:free",
+  "allowlist": [
+    "cohere/north-mini-code:free"
+  ],
+  "ts": "2026-06-30T12:40:23Z",
+  "redaction": "request scanned, no secret transmitted",
+  "response_sha256": "3df6068837fa1031583317997a5269dac3de193ed572ac23f262604b1465c641",
+  "bundle_problems": [],
+  "raw_artifact": ".ai-private/FIX-AI-PROVIDER-PIPELINE-bigllm-raw.md"
+}
