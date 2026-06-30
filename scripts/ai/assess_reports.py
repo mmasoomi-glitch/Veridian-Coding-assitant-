@@ -2,6 +2,11 @@
 # One-off: run the report text through the approved Big-LLM (route-validated + redaction-scanned)
 # for an honest assessment. Reuses the gateway's validation. NOT a code-author call.
 import os, sys, importlib.util, json, hashlib
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
 HERE = os.path.dirname(os.path.abspath(__file__))
 spec = importlib.util.spec_from_file_location("gw", os.path.join(HERE, "openrouter_bigllm_bundle.py"))
 gw = importlib.util.module_from_spec(spec); spec.loader.exec_module(gw)
@@ -33,7 +38,7 @@ content = (((resp.get("choices") or [{}])[0]).get("message") or {}).get("content
 
 os.makedirs("docs/program-control/ai-evidence/ASSESS", exist_ok=True)
 json.dump({"configured_model": model, "returned_model": returned,
-           "response_sha256": hashlib.sha256(content.encode()).hexdigest(),
+           "response_sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
            "redaction": "scanned, no secret sent"},
           open("docs/program-control/ai-evidence/ASSESS/model-route-manifest.json", "w"), indent=2)
 out = "================================================================================\n" \

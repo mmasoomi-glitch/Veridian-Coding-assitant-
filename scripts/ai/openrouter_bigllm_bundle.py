@@ -23,6 +23,14 @@ Exit: 0 ok · 2 MODEL_ROUTE_BLOCKED · 3 usage · 4 redaction abort · 5 call/ve
 import argparse, hashlib, json, os, re, sys, urllib.request, urllib.error
 from datetime import datetime, timezone
 
+# UTF-8-safe console so model/exception content with em dash / smart quotes can't
+# raise UnicodeEncodeError on a Windows cp1252 console (FIX-REPORT-UTF8-01).
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
 BASE_URL = os.environ.get("VERIDIAN_OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
 PRIVATE_DIR = os.environ.get("VERIDIAN_AI_PRIVATE_ARTIFACT_DIR", ".ai-private")
 EVIDENCE_ROOT = os.path.join("docs", "program-control", "ai-evidence")

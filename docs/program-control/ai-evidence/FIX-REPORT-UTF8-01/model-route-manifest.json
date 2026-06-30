@@ -1,0 +1,16 @@
+{
+  "package_id": "FIX-REPORT-UTF8-01",
+  "provider": "openrouter",
+  "configured_model": "cohere/north-mini-code:free",
+  "returned_model": "cohere/north-mini-code-20260617:free",
+  "allowlist": [
+    "cohere/north-mini-code:free"
+  ],
+  "ts": "2026-06-30T05:41:24Z",
+  "redaction": "request scanned, no secret transmitted",
+  "response_sha256": "6b09334eeb624612b27c89778203ae974ff1caea148e5303a2dc36a9d714c1d0",
+  "bundle_problems": [
+    "contains TODO/pseudo-code/ellipsis stub"
+  ],
+  "raw_artifact": ".ai-private/FIX-REPORT-UTF8-01-bigllm-raw.md"
+}
