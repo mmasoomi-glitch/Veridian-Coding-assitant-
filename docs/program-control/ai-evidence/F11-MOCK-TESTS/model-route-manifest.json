@@ -1,0 +1,14 @@
+{
+  "package_id": "F11-MOCK-TESTS",
+  "provider": "openrouter",
+  "configured_model": "cohere/north-mini-code:free",
+  "returned_model": "cohere/north-mini-code-20260617:free",
+  "allowlist": [
+    "cohere/north-mini-code:free"
+  ],
+  "ts": "2026-06-30T05:34:10Z",
+  "redaction": "request scanned, no secret transmitted",
+  "response_sha256": "18c869dbb2f82a6a303b68284855a43c81cc30cb71131067689f78fed2494590",
+  "bundle_problems": [],
+  "raw_artifact": ".ai-private/F11-MOCK-TESTS-bigllm-raw.md"
+}
