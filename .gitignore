@@ -83,3 +83,5 @@ docs/program-control/ai-evidence/**/*openrouter*.md
 docs/program-control/ai-evidence/**/*-deepseek-raw.md
 
 __pycache__/
+.prod-modules/
+release/

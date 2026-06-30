@@ -1,7 +1,7 @@
 {
   "name": "react-example",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
@@ -12,7 +12,8 @@
     "lint": "tsc --noEmit",
     "test:ai": "tsx tests/ai-provider.test.ts",
     "electron": "electron .",
-    "dist:win": "npm run build && electron-builder --win portable"
+    "stage:prod": "rm -rf .prod-modules && mkdir -p .prod-modules && cp package.json .prod-modules/ && (cp package-lock.json .prod-modules/ 2>/dev/null || true) && cd .prod-modules && npm install --omit=dev --no-audit --no-fund --ignore-scripts",
+    "dist:win": "npm run build && npm run stage:prod && electron-builder --win nsis"
   },
   "dependencies": {
     "@capacitor/android": "^6.2.1",
@@ -42,5 +43,32 @@
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.3"
+  },
+  "build": {
+    "appId": "com.veridian.app",
+    "productName": "Veridian",
+    "directories": { "output": "release", "buildResources": "windows-app" },
+    "files": ["electron/**/*", "package.json"],
+    "extraResources": [
+      { "from": "dist", "to": "dist" },
+      { "from": "telemetry", "to": "telemetry" },
+      { "from": "windows-app", "to": "windows-app" },
+      { "from": ".prod-modules/node_modules", "to": "node_modules" }
+    ],
+    "win": {
+      "target": ["nsis"],
+      "icon": "windows-app/veridian.ico",
+      "artifactName": "Veridian-Setup-${version}.exe"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Veridian",
+      "uninstallDisplayName": "Veridian ${version}",
+      "deleteAppDataOnUninstall": false
+    }
   }
 }
