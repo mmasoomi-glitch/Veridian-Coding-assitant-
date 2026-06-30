@@ -16,8 +16,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { writeJsonAtomic } from "../lib/atomic";
+import { dataPath } from "../lib/paths";
 
-const SETTINGS_FILE = path.join(process.cwd(), "orchestrator-settings.json");
+const SETTINGS_FILE = dataPath("orchestrator-settings.json");
 
 export type SettingScope = "global" | "device" | "project";
 

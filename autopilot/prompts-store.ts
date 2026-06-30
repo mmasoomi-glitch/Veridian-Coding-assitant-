@@ -8,8 +8,9 @@
 import fs from "fs";
 import path from "path";
 import { writeJsonAtomic } from "../lib/atomic";
+import { dataPath } from "../lib/paths";
 
-const FILE = path.join(process.cwd(), "prompts.json");
+const FILE = dataPath("prompts.json");
 
 export interface PromptItem {
   id: string;

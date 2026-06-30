@@ -13,9 +13,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { writeJsonAtomic } from "../lib/atomic";
+import { dataPath } from "../lib/paths";
 
-const METRICS_FILE = path.join(process.cwd(), "keystroke-metrics.json");
-const NUDGE_FILE = path.join(process.cwd(), "burnout-nudge.json");
+const METRICS_FILE = dataPath("keystroke-metrics.json");
+const NUDGE_FILE = dataPath("burnout-nudge.json");
 
 const RECENT_WINDOW_MS = 10 * 60 * 1000; // last ~10 minutes
 const NUDGE_COOLDOWN_MS = 5 * 60 * 1000; // >5 min between nudges

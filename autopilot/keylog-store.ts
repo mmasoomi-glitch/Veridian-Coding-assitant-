@@ -14,10 +14,11 @@
 import fs from "fs";
 import path from "path";
 import { spawn } from "child_process";
+import { dataPath } from "../lib/paths";
 
-const LOG_FILE   = path.join(process.cwd(), "keystroke-log.txt");
-const PAUSE_FILE = path.join(process.cwd(), "keylog.paused");
-const PID_FILE   = path.join(process.cwd(), "keylog.pid");
+const LOG_FILE   = dataPath("keystroke-log.txt");
+const PAUSE_FILE = dataPath("keylog.paused");
+const PID_FILE   = dataPath("keylog.pid");
 const PS1_FILE   = path.join(process.cwd(), "telemetry", "keylog.ps1");
 
 // Consider the recorder "live" if the log was touched within this window.

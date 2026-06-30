@@ -14,10 +14,11 @@ import fs from "fs";
 import path from "path";
 import { spawn } from "child_process";
 import { writeJsonAtomic } from "../lib/atomic";
+import { dataPath } from "../lib/paths";
 
-const FILE = path.join(process.cwd(), "screenshots-index.json");
+const FILE = dataPath("screenshots-index.json");
 const SCRIPT = path.join(process.cwd(), "telemetry", "screenshot.ps1");
-const SHOT_DIR = path.join(process.cwd(), "screenshots");
+const SHOT_DIR = dataPath("screenshots");
 const MAX = 200;
 
 export interface Shot {

@@ -8,8 +8,9 @@
 import fs from "fs";
 import path from "path";
 import { writeJsonAtomic } from "../lib/atomic";
+import { dataPath } from "../lib/paths";
 
-const FILE = path.join(process.cwd(), "autopilot-learning.json");
+const FILE = dataPath("autopilot-learning.json");
 
 // Number of clean approvals (no rejections) before an action type is "trusted".
 const TRUST_THRESHOLD = parseInt(process.env.AUTOPILOT_TRUST_THRESHOLD || "3", 10);

@@ -8,8 +8,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { writeJsonAtomic } from "../lib/atomic";
+import { dataPath } from "../lib/paths";
 
-const FILE = path.join(process.cwd(), "feature-flags.json");
+const FILE = dataPath("feature-flags.json");
 
 export interface FeatureFlag {
   id: string;

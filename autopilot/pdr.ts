@@ -12,8 +12,9 @@ import fs from "fs";
 import path from "path";
 import { chatJSON } from "../ai/providers";
 import { writeJsonAtomic } from "../lib/atomic";
+import { dataPath } from "../lib/paths";
 
-const FILE = path.join(process.cwd(), "pdr-store.json");
+const FILE = dataPath("pdr-store.json");
 
 export interface Pdr {
   id: string;

@@ -719,7 +719,7 @@ app.delete("/api/notebook/:id", (req, res) => { notebook.deleteEntry(req.params.
 app.get("/api/notebook/file/:id", (req, res) => {
   const entry = notebook.listEntries().find((e: any) => e.id === req.params.id);
   if (!entry || entry.type !== "file") return res.status(404).json({ error: "not found" });
-  res.sendFile(path.join(process.cwd(), entry.content));
+  res.sendFile(dataPath(entry.content));
 });
 
 // 4j. Clipboard history (click-to-restore). Local history + unified cross-device view.

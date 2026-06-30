@@ -61,3 +61,37 @@ rebuild + packaged-run proof. Each is an independent data file (no cross-module 
 migrate in any grouping; the pattern is proven (22/22 suite green).
 
 ## VERDICT (2a): F11 PASS — READY TO COMMIT (critical data now survives upgrade)
+
+---
+
+## Part 2b (FULL SWEEP COMPLETE + RUNTIME PROVEN) — F11 PASS
+Migrated ALL remaining DATA stores to dataPath() and added app.setName('Veridian'):
+- autopilot: backup, learn, desktop-briefs, todo-store, prompts-store, scratch-store, pdr, notebook
+  (incl. notebook-files dir + delete/save paths), screenshots-store (data; KEPT screenshot.ps1 on cwd),
+  burnout-store, keylog-store (data; KEPT keylog.ps1 on cwd), ai-ask (history + generic data reader),
+  sync-store, clip-sync-store, clip-history (history + counts), flags-store.
+- orchestrator: device-registry, settings-store, secret-reference-registry, lock-manager,
+  repo-registry (KEPT scan-root process.cwd()).
+- server.ts:722 res.sendFile of notebook files -> dataPath (was a split-brain vs notebook.ts writes).
+- electron/main.cjs: app.setName('Veridian') so userData = %APPDATA%\Veridian (was %APPDATA%\react-example).
+
+### Checks
+- exit_code_truth: PASS — tsc --noEmit EXIT 0; node --check electron/main.cjs EXIT 0.
+- regression: PASS — FULL tsx suite 22 passed / 0 failed (twice: after sweep, after the 2 missed-site fixes).
+- completeness: PASS — grep confirms the ONLY residual `path.join(process.cwd(), "...")` in stores are the
+  two intended RESOURCE refs (keylog.ps1, screenshot.ps1); all DATA files migrated. Two sites initially
+  missed (burnout-store.ts, server.ts:722 notebook serve) were caught by the verification grep and fixed.
+- path_of_claim (POSITIVE RUNTIME): PASS — booted the server with VERIDIAN_DATA_DIR=<empty temp dir>;
+  GET /api/telemetry/current; workspace-sessions.json was written to the TEMP DATA_DIR (mtime 10:02:40,
+  fresh) NOT to repo cwd (cwd file mtime 09:19:55 = stale pre-existing, git-ignored, untouched this run).
+  Proves data now lands under VERIDIAN_DATA_DIR (= %APPDATA%\Veridian packaged) and survives upgrade.
+- no_secret_leak: PASS — vault/auth-users/secret-references files relocate but remain git-ignored + sealed.
+- blast_radius: L2 (path-resolution only; no logic/auth/route change). evidence_real: PASS.
+
+### Still pending (honest, separate package): installer v1.0.1 REBUILD + packaged-install verification
+The CODE fix is complete and runtime-proven via VERIDIAN_DATA_DIR. Producing the actual signed/updated
+installer (electron-builder --win nsis -> Veridian-Setup-1.0.1.exe) and verifying on a real install/upgrade
+is a heavy build step deferred to a follow-up (FIX-INSTALLER-REBUILD). Label here: RUNTIME VERIFIED
+(positive, data-relocation) for the code; installer artifact NOT yet rebuilt.
+
+## VERDICT (2b): F11 PASS — READY TO COMMIT (data-dir code fix complete + runtime proven)

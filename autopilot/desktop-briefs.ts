@@ -5,8 +5,9 @@
 import fs from "fs";
 import path from "path";
 import { writeJsonAtomic } from "../lib/atomic";
+import { dataPath } from "../lib/paths";
 
-const FILE = path.join(process.cwd(), "desktop-briefs.json");
+const FILE = dataPath("desktop-briefs.json");
 
 export interface DesktopBrief {
   desktop: string;

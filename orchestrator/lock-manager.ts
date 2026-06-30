@@ -36,7 +36,9 @@ export interface AcquireResult {
 }
 
 const DEFAULT_TTL_MS = 15 * 60 * 1000; // 15 min — long enough for an edit, short enough to self-heal
-const LOCKS_FILE = path.join(process.cwd(), "orchestrator-locks.json");
+import { dataPath } from "../lib/paths";
+
+const LOCKS_FILE = dataPath("orchestrator-locks.json");
 
 function loadLocks(): Lock[] {
   try {

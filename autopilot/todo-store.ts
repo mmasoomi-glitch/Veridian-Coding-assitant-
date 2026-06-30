@@ -8,8 +8,9 @@
 import fs from "fs";
 import path from "path";
 import { writeJsonAtomic } from "../lib/atomic";
+import { dataPath } from "../lib/paths";
 
-const FILE = path.join(process.cwd(), "todos.json");
+const FILE = dataPath("todos.json");
 
 export interface Todo {
   id: string;

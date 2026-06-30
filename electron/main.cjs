@@ -20,6 +20,11 @@ const http = require('http');
 const path = require('path');
 const fs = require('fs');
 
+// Force the app identity so app.getPath('userData') resolves to %APPDATA%\Veridian
+// (not %APPDATA%\<package.json name>). The server's data root (VERIDIAN_DATA_DIR) is
+// set to this path below so user data lives outside the install dir and survives upgrades.
+app.setName('Veridian');
+
 const PORT = 3000;
 const SERVER_URL = `http://localhost:${PORT}`;
 

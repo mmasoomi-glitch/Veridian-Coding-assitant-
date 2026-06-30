@@ -13,8 +13,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { writeJsonAtomic } from "../lib/atomic";
+import { dataPath } from "../lib/paths";
 
-const DEVICES_FILE = path.join(process.cwd(), "devices.json");
+const DEVICES_FILE = dataPath("devices.json");
 
 export interface Device {
   id: string;        // stable unique id (uuid)

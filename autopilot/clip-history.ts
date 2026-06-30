@@ -18,13 +18,14 @@ import crypto from "crypto";
 import { spawn } from "child_process";
 import { writeJsonAtomic } from "../lib/atomic";
 import { encryptToBlob, decryptBlob, syncCryptoReady } from "../lib/sync-crypto";
+import { dataPath } from "../lib/paths";
 
-const FILE = path.join(process.cwd(), "clip-history.json");
+const FILE = dataPath("clip-history.json");
 // Sibling file: persistent per-distinct-value counts across all history (survives
 // the rolling MAX cap, so "most used" reflects long-term frequency, not just the
 // last 20 entries). Keyed by a one-way hash of the value; each row keeps a
 // redacted-safe preview. The raw value is NEVER stored here.
-const COUNTS_FILE = path.join(process.cwd(), "clip-counts.json");
+const COUNTS_FILE = dataPath("clip-counts.json");
 const MAX = 20;
 
 // Ephemeral, in-process raw-value cache (id -> raw). Lets restore() return a

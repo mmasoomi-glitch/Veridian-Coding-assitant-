@@ -7,9 +7,10 @@
 import fs from "fs";
 import path from "path";
 import { writeJsonAtomic } from "../lib/atomic";
+import { dataPath } from "../lib/paths";
 
-const FILE = path.join(process.cwd(), "notebook.json");
-const FILES_DIR = path.join(process.cwd(), "notebook-files");
+const FILE = dataPath("notebook.json");
+const FILES_DIR = dataPath("notebook-files");
 
 export interface NoteEntry {
   id: string;
@@ -93,7 +94,7 @@ export function deleteEntry(id: string): void {
     // If a file entry is removed, try to clean up its bytes on disk too.
     if (removed && removed.type === "file" && removed.content) {
       try {
-        const abs = path.join(process.cwd(), removed.content);
+        const abs = dataPath(removed.content);
         if (abs.startsWith(FILES_DIR) && fs.existsSync(abs)) fs.unlinkSync(abs);
       } catch { /* best-effort cleanup */ }
     }
@@ -114,7 +115,7 @@ export function saveFile(name: string, base64: string, project?: string): NoteEn
     const comma = base64.indexOf(",");
     const payload = base64.startsWith("data:") && comma >= 0 ? base64.slice(comma + 1) : base64;
     const bytes = Buffer.from(payload, "base64");
-    fs.writeFileSync(path.join(process.cwd(), relPath), bytes);
+    fs.writeFileSync(dataPath(relPath), bytes);
   } catch (err) {
     console.error("notebook saveFile failed:", err);
   }

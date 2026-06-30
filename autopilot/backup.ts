@@ -12,6 +12,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { writeJsonAtomic } from "../lib/atomic";
+import { dataPath } from "../lib/paths";
 
 // --- Config (env-overridable) -----------------------------------------------
 
@@ -19,7 +20,7 @@ const SSH_KEY = process.env.DEPLOY_SSH_KEY || path.join(process.env.USERPROFILE 
 const HOST = process.env.DEPLOY_HOST || "root@89.167.49.209";
 const BACKUP_ROOT = process.env.BACKUP_ROOT || "/mnt/HC_Volume_106116955/veridian-backups";
 
-const LOG_FILE = path.join(process.cwd(), "backup-log.json");
+const LOG_FILE = dataPath("backup-log.json");
 
 // Common ssh options: never prompt (BatchMode), auto-accept new host keys so a
 // first connection doesn't hang waiting on interactive confirmation.

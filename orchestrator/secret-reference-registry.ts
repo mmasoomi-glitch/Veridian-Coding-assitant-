@@ -46,7 +46,9 @@ export interface SecretRef {
 /** Metadata accepted by addRef — never includes id/firstSeen (generated) or any value. */
 export type SecretRefInput = Omit<SecretRef, "id" | "firstSeen" | "lastUsed">;
 
-const FILE_PATH = path.join(process.cwd(), "secret-references.json");
+import { dataPath } from "../lib/paths";
+
+const FILE_PATH = dataPath("secret-references.json");
 
 // Fields that are NEVER persisted — even if a caller passes them in, they're dropped.
 const FORBIDDEN_FIELDS = new Set([

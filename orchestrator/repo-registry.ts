@@ -11,8 +11,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { writeJsonAtomic } from "../lib/atomic";
+import { dataPath } from "../lib/paths";
 
-const REGISTERED_FILE = path.join(process.cwd(), "registered-repos.json");
+const REGISTERED_FILE = dataPath("registered-repos.json");
 
 export type Risk = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 

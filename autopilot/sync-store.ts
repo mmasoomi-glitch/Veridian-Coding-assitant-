@@ -13,8 +13,9 @@ import fs from "fs";
 import path from "path";
 import { sanitizeOutboundSnapshot, payloadHasForbiddenFields } from "./sync-sanitize";
 import { writeJsonAtomic } from "../lib/atomic";
+import { dataPath } from "../lib/paths";
 
-const FILE = path.join(process.cwd(), "sync-machines.json");
+const FILE = dataPath("sync-machines.json");
 
 export interface MachineSnapshot {
   machineId: string;

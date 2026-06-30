@@ -16,8 +16,9 @@ import path from "path";
 import { chatJSON } from "../ai/providers";
 import { sanitizeContextForLLM } from "../ai/context-sanitizer";
 import { writeJsonAtomic } from "../lib/atomic";
+import { dataPath } from "../lib/paths";
 
-const HISTORY_FILE = path.join(process.cwd(), "ask-history.json");
+const HISTORY_FILE = dataPath("ask-history.json");
 const MAX_HISTORY = 50;
 const CONTEXT_CHAR_CAP = 6000;
 
@@ -31,7 +32,7 @@ export interface AskEntry {
 
 function readJson(file: string): any {
   try {
-    return JSON.parse(fs.readFileSync(path.join(process.cwd(), file), "utf8"));
+    return JSON.parse(fs.readFileSync(dataPath(file), "utf8"));
   } catch {
     return null;
   }

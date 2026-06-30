@@ -3,8 +3,9 @@
 import fs from "fs";
 import path from "path";
 import { writeJsonAtomic } from "../lib/atomic";
+import { dataPath } from "../lib/paths";
 
-const FILE = path.join(process.cwd(), "scratch-buffer.json");
+const FILE = dataPath("scratch-buffer.json");
 const MAX_SNAPSHOTS = 30;
 
 export interface ScratchState {

@@ -10,8 +10,9 @@
 import fs from "fs";
 import path from "path";
 import { writeJsonAtomic } from "../lib/atomic";
+import { dataPath } from "../lib/paths";
 
-const FILE = path.join(process.cwd(), "clip-sync.json");
+const FILE = dataPath("clip-sync.json");
 const PER_MACHINE_CAP = 100; // newest-first cap per machine
 const LIST_CAP = 200;        // total returned on pull
 
