@@ -87,6 +87,10 @@ function spawnServer() {
       ELECTRON_RUN_AS_NODE: '1',
       NODE_ENV: 'production',
       VERIDIAN_WATCH_DIR: process.env.VERIDIAN_WATCH_DIR || watchDir,
+      // FIX-INSTALLER-DATADIR: persist user data under %APPDATA%\Veridian (userData), NOT the
+      // install dir, so data survives upgrade/uninstall. lib/paths.ts reads this; CODE/RESOURCE
+      // paths (.ps1, dist) intentionally keep using cwd/resourcesPath.
+      VERIDIAN_DATA_DIR: process.env.VERIDIAN_DATA_DIR || watchDir,
       TELEMETRY_POLL_MS: process.env.TELEMETRY_POLL_MS || '30000',
     },
     stdio: ['ignore', 'pipe', 'pipe'],

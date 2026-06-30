@@ -1,0 +1,14 @@
+{
+  "package_id": "FIX-INSTALLER-DATADIR",
+  "provider": "openrouter",
+  "configured_model": "cohere/north-mini-code:free",
+  "returned_model": "cohere/north-mini-code-20260617:free",
+  "allowlist": [
+    "cohere/north-mini-code:free"
+  ],
+  "ts": "2026-06-30T05:47:05Z",
+  "redaction": "request scanned, no secret transmitted",
+  "response_sha256": "31e17848399e62cf00670186a25c2316a8f685756bf5fdeaf0e1591407e3e827",
+  "bundle_problems": [],
+  "raw_artifact": ".ai-private/FIX-INSTALLER-DATADIR-bigllm-raw.md"
+}
