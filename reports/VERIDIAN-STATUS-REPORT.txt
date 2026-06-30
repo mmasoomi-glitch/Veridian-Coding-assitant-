@@ -35,7 +35,12 @@ B. LATEST WAVE — VC02 CONTEXT ENGINE (this is the first "assistant" feature)
 - tsc clean; unit tests 10/10; INDEPENDENTLY REVIEWED = APPROVE.
 - RUNTIME: /api/context/current returns honest "context unavailable" (negative path verified).
   Positive data BLOCKED by a PRE-EXISTING telemetry collector JSON-parse bug.
-- Label: LOCAL TESTED + RUNTIME VERIFIED (error path) + INDEPENDENTLY REVIEWED. Committed+pushed.
+- Label (F11-corrected 2026-06-30): RUNTIME VERIFIED (positive, API) — UNBLOCKED by FIX-TELEMETRY-PARSE.
+  /api/context/current -> 200 populated snapshot (project veridian@branch, modifiedCount 13, brief,
+  topRisk MEDIUM, waiting[]); evidence browser-evidence/FIX-TELEMETRY-PARSE/context-runtime-positive.json.
+  Logic LOCAL TESTED 10/10 + INDEPENDENTLY REVIEWED. REMAINING: FocusNow React render not yet
+  browser-verified. (Earlier "RUNTIME VERIFIED (error path)" over-claim was withdrawn, then re-earned
+  on the proven positive path — see ai-evidence/VC02/f11-reality-check.md.)
 
 --------------------------------------------------------------------------------
 C. KNOWN ISSUES (current, truthful)

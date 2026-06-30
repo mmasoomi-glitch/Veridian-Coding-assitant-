@@ -1,0 +1,14 @@
+{
+  "package_id": "FIX-TELEMETRY-PARSE",
+  "provider": "openrouter",
+  "configured_model": "cohere/north-mini-code:free",
+  "returned_model": "cohere/north-mini-code-20260617:free",
+  "allowlist": [
+    "cohere/north-mini-code:free"
+  ],
+  "ts": "2026-06-30T05:15:03Z",
+  "redaction": "request scanned, no secret transmitted",
+  "response_sha256": "0777a3e5b9284792c8fb9c82d1da1cc07cdf082edc067c6620f272f85e6fa7ab",
+  "bundle_problems": [],
+  "raw_artifact": ".ai-private/FIX-TELEMETRY-PARSE-bigllm-raw.md"
+}

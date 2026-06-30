@@ -5,6 +5,7 @@ import dotenv from "dotenv";
 import { execFile } from "child_process";
 import { createServer as createViteServer } from "vite";
 import { recordTelemetry } from "./telemetry/persist";
+import { parseTelemetry } from "./telemetry/parse";
 import { getWaitingItems } from "./telemetry/watcher";
 import { chatJSON, activeProvider, aiConfigured, validateProvider } from "./ai/providers";
 import { recordFeedback, autonomyFor } from "./autopilot/learn";
@@ -314,11 +315,9 @@ function collectTelemetry(): Promise<any> {
       { timeout: 20000, maxBuffer: 4 * 1024 * 1024, windowsHide: true },
       (err, stdout) => {
         if (err) return reject(err);
-        try {
-          resolve(JSON.parse(stdout.trim()));
-        } catch (e) {
-          reject(new Error("Telemetry parse failure: " + (stdout || "").slice(0, 200)));
-        }
+        // Fail-soft: parseTelemetry never throws; on garbage stdout it returns a
+        // typed "unavailable" sentinel so the routes degrade honestly instead of 500ing.
+        resolve(parseTelemetry(stdout));
       }
     );
   });

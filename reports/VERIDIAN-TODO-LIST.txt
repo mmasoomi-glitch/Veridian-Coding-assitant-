@@ -4,9 +4,12 @@
 ================================================================================
 
 IMMEDIATE NEXT (unblocks the whole "assistant" layer):
- [NEXT] FIX-TELEMETRY-PARSE — make server.ts collectTelemetry robust: strip BOM/stray output,
-        tolerate non-ASCII in windowTitle, fail soft. Unblocks /api/telemetry/current AND
-        /api/context/current (VC02) to show REAL data on desktop + phone. Blast radius L1.
+ [DONE] FIX-TELEMETRY-PARSE — new telemetry/parse.ts (pure, never-throws): BOM strip + JSON
+        envelope slice + fail-soft sentinel; collectTelemetry wired to it. North-mini-code authored
+        (gateway BUNDLE_OK), Opus gate APPROVED WITH REQUIRED PATCH (model's server.ts diff context
+        was fabricated -> minimal real diff applied). tests/telemetry-parse.test.ts 11/11; tsc 0;
+        vc02+mc01 no regression. RUNTIME VERIFIED (positive): on :3942 (new code), /api/telemetry/current
+        AND /api/context/current both -> 200 JSON with REAL data. F11 PASS. Blast radius L1.
  [TODO] FIX-INSTALLER-DATADIR — packaged app must write data to %APPDATA%\Veridian (not Program
         Files) so data survives upgrade/uninstall; rebuild installer v1.0.1.
  [TODO] APK-LAN — rebuild APK with VITE_API_BASE=http://<PC-LAN-IP>:3000 + server 0.0.0.0 (auth)
@@ -14,8 +17,11 @@ IMMEDIATE NEXT (unblocks the whole "assistant" layer):
 
 PRODUCT WAVES (priority order — the "real assistant"):
  [DONE]     MC01 — Phone Home "Focus Now" (telemetry + waiting). Phone screenshot pending device.
- [BLOCKED] VC02/MC04 (blocked on FIX-TELEMETRY-PARSE; per pipeline review) — Context engine /api/context/current (where-was-I: project, brief, risk,
-            recent, waiting). Built/tested/reviewed; live data blocked by FIX-TELEMETRY-PARSE.
+ [DONE-API] VC02/MC04 — Context engine /api/context/current (where-was-I: project, brief, risk,
+            recent, waiting). UNBLOCKED by FIX-TELEMETRY-PARSE. RUNTIME VERIFIED (positive, API):
+            /api/context/current -> 200 populated snapshot (project veridian@branch, modifiedCount 13,
+            brief, topRisk MEDIUM, waiting[]). REMAINING: FocusNow React render not yet browser-verified
+            (LOCAL TESTED 10/10) -> VC05/VC10 browser-proof pass.
  [TODO]     VC06/MC02 — One Next Step + Waiting-On-You + blocker explainer.
  [TODO]     VC07/MC03 — Live agent/run cards + stale detection + evidence ledger view.
  [TODO]     VC03/MC05 — Explainable AI chat (shows the safe context it used).
