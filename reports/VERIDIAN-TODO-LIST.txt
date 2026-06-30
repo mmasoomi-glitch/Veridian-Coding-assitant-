@@ -10,8 +10,19 @@ IMMEDIATE NEXT (unblocks the whole "assistant" layer):
         was fabricated -> minimal real diff applied). tests/telemetry-parse.test.ts 11/11; tsc 0;
         vc02+mc01 no regression. RUNTIME VERIFIED (positive): on :3942 (new code), /api/telemetry/current
         AND /api/context/current both -> 200 JSON with REAL data. F11 PASS. Blast radius L1.
+ [NEXT] F11-MOCK-TESTS — write scripts/ai/test_f11_reality_check.py (policy + plan shipped; the
+        executable mock test is NOT yet written). Canned bundles: exit1-but-file-written -> NOT PASS;
+        neg-path-only -> PASS WITH RELABEL; clobbered-real-file -> REPAIR; secret-in-input -> BLOCKED;
+        clean -> PASS; commit-gate assertion. Pack: F11-REALITY-CHECK-POLICY.md. L0.
+ [NEXT] FIX-REPORT-UTF8-01 — sys.stdout/stderr.reconfigure(utf-8) in assess_reports.py +
+        openrouter_bigllm_bundle.py so a written report can't exit 1 on cp1252; success=exit0;
+        failed output-path can't look like success. Pack ready. L0. (file-disjoint, parallel-safe)
+ [NEXT] FIX-TRUTH-LABEL-01 — sentinel rule (TRUTH_LABEL) + 7-field ledger schema: reject
+        "RUNTIME VERIFIED" unless positive_path=PROVEN; reject labels outside the 9-label enum.
+        V05 verdict: policy alone can't enforce -> code+test justified. Pack ready. L0. (parallel-safe)
  [TODO] FIX-INSTALLER-DATADIR — packaged app must write data to %APPDATA%\Veridian (not Program
-        Files) so data survives upgrade/uninstall; rebuild installer v1.0.1.
+        Files) so data survives upgrade/uninstall; rebuild installer v1.0.1. Pack ready. L2.
+        SEQUENCE AFTER telemetry (shares server.ts) — NOT parallel with the L0 packs above.
  [TODO] APK-LAN — rebuild APK with VITE_API_BASE=http://<PC-LAN-IP>:3000 + server 0.0.0.0 (auth)
         for standalone WiFi data; OR keep USB+adb reverse.
 
@@ -44,9 +55,13 @@ GOVERNANCE (done):
  [DONE] Model gateway (north-mini-code:free, route-verified) + 2 skills + safe-stage guard.
  [DONE] V00 Policy Sentinel real Task Scheduler watchdog (every 10 min, read-only).
  [DONE] Purpose ledger, intent manifest, journey map, evidence ledger.
+ [DONE] F11 Applied-Code Reality Check POLICY + schema + mock-test plan (executable test = F11-MOCK-TESTS above).
+ [DONE] F11 retrospectives: VC02 (PASS WITH RELABEL) + assessment-report 511397f (REPAIR REQUIRED).
 
 KNOWN BUGS TO CLEAR:
- [BLOCKED-UPSTREAM] Telemetry collector parse (see FIX-TELEMETRY-PARSE) — top priority.
- [TODO] Remove/relabel ApkCompanion.tsx simulated chrome. Remove dead loadScenario() code.
+ [DONE] Telemetry collector parse — FIXED (telemetry/parse.ts; positive runtime proven, F11 PASS).
+ [TODO] ASSESS report cp1252 exit-code defect -> FIX-REPORT-UTF8-01 (NEXT, above).
+ [TODO] VC02 over-claim recurrence guard -> FIX-TRUTH-LABEL-01 (NEXT, above).
+ [TODO] Remove/relabel ApkCompanion.tsx simulated chrome (VC08). Remove dead loadScenario() code.
  [TODO] Control Center UI browser verification.
 ================================================================================
