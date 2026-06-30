@@ -1,0 +1,14 @@
+{
+  "package_id": "FIX-TRUTH-LABEL-01",
+  "provider": "openrouter",
+  "configured_model": "cohere/north-mini-code:free",
+  "returned_model": "cohere/north-mini-code-20260617:free",
+  "allowlist": [
+    "cohere/north-mini-code:free"
+  ],
+  "ts": "2026-06-30T05:34:33Z",
+  "redaction": "request scanned, no secret transmitted",
+  "response_sha256": "fac97d707fa3387bcb007f0811d095ad7c7b116bdb8a6ee016401b4fbce8bae7",
+  "bundle_problems": [],
+  "raw_artifact": ".ai-private/FIX-TRUTH-LABEL-01-bigllm-raw.md"
+}

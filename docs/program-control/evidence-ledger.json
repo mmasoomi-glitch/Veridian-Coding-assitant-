@@ -1,0 +1,24 @@
+[
+  {
+    "package": "FIX-TELEMETRY-PARSE",
+    "label": "RUNTIME VERIFIED",
+    "positive_path": "PROVEN",
+    "negative_path": "PROVEN",
+    "evidence_ref": "browser-evidence/FIX-TELEMETRY-PARSE/context-runtime-positive.json"
+  },
+  {
+    "package": "VC02",
+    "label": "RUNTIME VERIFIED",
+    "positive_path": "PROVEN",
+    "negative_path": "PROVEN",
+    "evidence_ref": "browser-evidence/FIX-TELEMETRY-PARSE/context-runtime-positive.json",
+    "blocked_by": null
+  },
+  {
+    "package": "MC01",
+    "label": "LOCAL TESTED",
+    "positive_path": "NOT_PROVEN",
+    "negative_path": "N/A",
+    "evidence_ref": "ai-evidence/MC01"
+  }
+]

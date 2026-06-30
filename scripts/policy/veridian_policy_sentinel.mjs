@@ -9,6 +9,7 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { checkTruthLabels } from "./truth-label-check.mjs";
 
 const REPO = process.env.VERIDIAN_REPO || "C:/Users/HI/veridian";
 const OUT_DIR = path.join(REPO, "docs", "program-control", "policy-sentinel");
@@ -68,6 +69,18 @@ function run() {
       if (fs.statSync(dir).isDirectory() && !fs.existsSync(path.join(dir, "model-route-manifest.json")) && d !== "" ) {
         // tolerate older dirs (D24 etc.) — only flag VC*/MC* writer packages
         if (/^(VC|MC)\d+/.test(d)) violations.push(["MISSING_ROUTE_EVIDENCE", `ai-evidence/${d} has no model-route-manifest.json`, "record the Big-LLM route manifest"]);
+      }
+    }
+  } catch {}
+
+  // truth-label enforcement (FIX-TRUTH-LABEL-01): reject RUNTIME VERIFIED without positive_path=PROVEN
+  // and any label outside the closed vocabulary, read from the structured evidence ledger.
+  try {
+    const ledgerPath = path.join(REPO, "docs", "program-control", "evidence-ledger.json");
+    if (fs.existsSync(ledgerPath)) {
+      const records = JSON.parse(fs.readFileSync(ledgerPath, "utf8"));
+      for (const v of checkTruthLabels(records)) {
+        violations.push([v.reason, `${v.package || "?"}: ${v.detail}`, "correct the label or prove positive_path with evidence"]);
       }
     }
   } catch {}
