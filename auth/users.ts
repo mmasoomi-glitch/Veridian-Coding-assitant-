@@ -16,8 +16,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { writeJsonAtomic } from "../lib/atomic";
+import { dataPath } from "../lib/paths";
 
-const FILE = path.join(process.cwd(), "auth-users.json");
+const FILE = dataPath("auth-users.json");
 
 export type Role = "admin" | "user";
 

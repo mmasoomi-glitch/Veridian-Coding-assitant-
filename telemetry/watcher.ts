@@ -15,6 +15,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { dataPath } from "../lib/paths";
 
 export interface WaitingItem {
   source: string;
@@ -61,7 +62,7 @@ function readJsonArray(file: string): any[] {
 
 function sessionItems(now: number): WaitingItem[] {
   const items: WaitingItem[] = [];
-  const rows = readJsonArray(path.join(process.cwd(), "sessions.json"));
+  const rows = readJsonArray(dataPath("sessions.json"));
   for (const s of rows) {
     try {
       const desktop = Number(s?.desktop) || 0;
@@ -88,7 +89,7 @@ function sessionItems(now: number): WaitingItem[] {
 function fleetItems(now: number): WaitingItem[] {
   const items: WaitingItem[] = [];
   // fleet-progress.json is stored newest-first; take the most recent few.
-  const rows = readJsonArray(path.join(process.cwd(), "fleet-progress.json")).slice(0, MAX_FLEET);
+  const rows = readJsonArray(dataPath("fleet-progress.json")).slice(0, MAX_FLEET);
   for (const e of rows) {
     try {
       const project = String(e?.project ?? "");

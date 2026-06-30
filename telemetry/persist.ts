@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { writeJsonAtomic } from "../lib/atomic";
+import { dataPath } from "../lib/paths";
 
 // --- Data shapes (compatible with src/types.ts, server-side plain objects) ---
 
@@ -32,7 +33,7 @@ export interface SessionHistory {
   timeline: TimelineEvent[];
 }
 
-const STORE_PATH = path.join(process.cwd(), "workspace-sessions.json");
+const STORE_PATH = dataPath("workspace-sessions.json");
 const LIVE_SESSION_ID = "live-telemetry";
 const MAX_TIMELINE = 60;
 const MAX_PENDING = 4;

@@ -31,3 +31,33 @@ reviewer: Opus gate on applied artifacts
 Part 2 (store sweep: migrate ~28 DATA sites across auth/autopilot/orchestrator/telemetry + server.ts:51
 to dataPath(); keep .ps1/dist/git on cwd; add app.setName('Veridian')) follows, then a packaged-run
 proof and installer v1.0.1 rebuild before any RUNTIME VERIFIED label.
+
+---
+
+## Part 2a (CRITICAL CLUSTER MIGRATED) — F11 PASS
+Migrated the highest-value DATA stores (the ones whose loss would break login + lose history) to
+dataPath(): auth/vault.ts (veridian.cred, totp-config.json), auth/users.ts (auth-users.json),
+server.ts:51 + telemetry/persist.ts (workspace-sessions.json), autopilot/sessions.ts (sessions.json),
+autopilot/fleet.ts (fleet-projects/-progress.json), telemetry/watcher.ts (reads sessions.json +
+fleet-progress.json). The three shared files (workspace-sessions / sessions / fleet-progress) were
+migrated as ATOMIC reader+writer groups → no split-brain.
+
+- exit_code_truth: PASS — `npx tsc --noEmit` EXIT 0.
+- regression: PASS — FULL tsx suite **22 passed, 0 failed** (dataPath defaults to cwd in dev, so all
+  data resolves identically; auth-vault + admin-users specifically green).
+- diff_equals_approved: PASS — mechanical process.cwd()→dataPath swaps + the model-authored dataPath
+  helper; no .ps1/dist/git refs touched; no logic change.
+- platform: in the PACKAGED app these stores now write under VERIDIAN_DATA_DIR (userData) instead of
+  Program Files → they survive upgrade/uninstall. (Folder is currently %APPDATA%\react-example until
+  app.setName('Veridian') is added in 2b — but upgrade-survival, the actual bug, is already achieved.)
+- claimed_label: INTEGRATED (critical stores); RUNTIME VERIFIED deferred until a packaged-run proof.
+
+### Still pending (part 2b, honest): ~21 independent single-file stores
+autopilot/{backup,learn,desktop-briefs,todo-store,prompts-store,scratch-store,pdr,notebook,
+screenshots-store(keep .ps1),burnout-store,keylog-store(keep .ps1),ai-ask,sync-store,clip-sync-store,
+clip-history,flags-store}.ts + orchestrator/{device-registry,settings-store,secret-reference-registry,
+lock-manager,repo-registry(keep scan-root)}.ts. Plus app.setName('Veridian') and installer v1.0.1
+rebuild + packaged-run proof. Each is an independent data file (no cross-module sharing) → safe to
+migrate in any grouping; the pattern is proven (22/22 suite green).
+
+## VERDICT (2a): F11 PASS — READY TO COMMIT (critical data now survives upgrade)

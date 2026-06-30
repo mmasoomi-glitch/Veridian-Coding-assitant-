@@ -10,9 +10,10 @@ import path from "node:path";
 import { chatJSON, aiConfigured } from "../ai/providers";
 import { getGitStats } from "../telemetry/gitstats";
 import { writeJsonAtomic } from "../lib/atomic";
+import { dataPath } from "../lib/paths";
 
-const PROJECTS_FILE = path.join(process.cwd(), "fleet-projects.json");
-const PROGRESS_FILE = path.join(process.cwd(), "fleet-progress.json");
+const PROJECTS_FILE = dataPath("fleet-projects.json");
+const PROGRESS_FILE = dataPath("fleet-progress.json");
 
 export interface FleetProject {
   desktop: number;

@@ -17,9 +17,10 @@ import crypto from "node:crypto";
 import { authenticator } from "otplib";
 import { dpapiAvailable, dpapiProtect, dpapiUnprotect } from "../lib/dpapi";
 import { writeJsonAtomic } from "../lib/atomic";
+import { dataPath } from "../lib/paths";
 
-const CRED_PATH = path.join(process.cwd(), "veridian.cred");
-const LEGACY_TOTP_PATH = path.join(process.cwd(), "totp-config.json");
+const CRED_PATH = dataPath("veridian.cred");
+const LEGACY_TOTP_PATH = dataPath("totp-config.json");
 
 interface VaultData {
   v: 1;

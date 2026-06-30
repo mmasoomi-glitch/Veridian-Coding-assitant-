@@ -6,6 +6,7 @@ import { execFile } from "child_process";
 import { createServer as createViteServer } from "vite";
 import { recordTelemetry } from "./telemetry/persist";
 import { parseTelemetry } from "./telemetry/parse";
+import { dataPath } from "./lib/paths";
 import { getWaitingItems } from "./telemetry/watcher";
 import { chatJSON, activeProvider, aiConfigured, validateProvider } from "./ai/providers";
 import { recordFeedback, autonomyFor } from "./autopilot/learn";
@@ -49,7 +50,7 @@ dotenv.config();
 
 const app = express();
 const PORT = parseInt(process.env.PORT || "3000", 10);
-const SESSION_DB_PATH = path.join(process.cwd(), "workspace-sessions.json");
+const SESSION_DB_PATH = dataPath("workspace-sessions.json");
 
 // CORS — allow the packaged APK WebView (capacitor://, http(s)://localhost)
 // and browsers to call the API cross-origin. No cookies/credentials are used,

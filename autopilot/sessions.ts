@@ -10,8 +10,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { chatJSON, aiConfigured } from "../ai/providers";
+import { dataPath } from "../lib/paths";
 
-const SESSIONS_FILE = path.join(process.cwd(), "sessions.json");
+const SESSIONS_FILE = dataPath("sessions.json");
 
 export interface DesktopSession {
   desktop: number;
