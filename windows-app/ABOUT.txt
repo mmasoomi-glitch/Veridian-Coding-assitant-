@@ -1,0 +1,10 @@
+VERIDIAN
+
+Satellite World Trading LLC
+Copyright (c) 2026 Satellite World Trading LLC. All Rights Reserved.
+
+Veridian (TM) is a trademark of Satellite World Trading LLC.
+
+Veridian is a local, real-telemetry developer assistant and command center.
+This software is provided as-is. By installing, you acknowledge the above
+ownership and trademark notice.

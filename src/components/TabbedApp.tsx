@@ -60,7 +60,8 @@ export default function TabbedApp({ apiBase }: { apiBase: string }) {
       {/* Tab bar */}
       <div className="sticky top-0 z-40 bg-slate-950/90 backdrop-blur-xl border-b border-slate-800 px-4">
         <div className="flex items-center gap-1 overflow-x-auto py-2">
-          <span className="text-emerald-400 font-bold text-sm mr-3 pl-1 tracking-tight whitespace-nowrap">◆ Veridian</span>
+          <span className="text-emerald-400 font-bold text-sm mr-1 pl-1 tracking-tight whitespace-nowrap">◆ Veridian</span>
+          <span className="hidden md:inline text-[10px] text-slate-500 mr-3 whitespace-nowrap" title="Veridian™ is a trademark of Satellite World Trading LLC">v1.0.3 · by Satellite World Trading LLC</span>
           {tabs.map(({ id, label, Icon }) => (
             <button
               key={id}
@@ -108,6 +109,11 @@ export default function TabbedApp({ apiBase }: { apiBase: string }) {
 
       {/* Global burnout nudge (any tab) */}
       <BurnoutNudge apiBase={apiBase} />
+
+      {/* Ownership / trademark footer */}
+      <footer className="border-t border-slate-800 px-4 py-2 text-center text-[10px] leading-relaxed text-slate-500">
+        © 2026 Satellite World Trading LLC · All Rights Reserved · Veridian™ is a trademark of Satellite World Trading LLC
+      </footer>
     </div>
   );
 }
