@@ -1,0 +1,6 @@
+{
+  "configured_model": "cohere/north-mini-code:free",
+  "returned_model": "cohere/north-mini-code-20260617:free",
+  "response_sha256": "46325046e00e232ddc0c8baccc535d78f693aa56f59dc013d046222f715d3119",
+  "redaction": "scanned, no secret sent"
+}

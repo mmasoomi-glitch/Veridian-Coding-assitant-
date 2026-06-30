@@ -1,0 +1,46 @@
+================================================================================
+ VERIDIAN — TODO / WORK-PACKAGE BOARD  (2026-06-30)
+ Labels: [DONE] [IN-FLIGHT] [NEXT] [TODO] [BLOCKED] [SCAFFOLD]
+================================================================================
+
+IMMEDIATE NEXT (unblocks the whole "assistant" layer):
+ [NEXT] FIX-TELEMETRY-PARSE — make server.ts collectTelemetry robust: strip BOM/stray output,
+        tolerate non-ASCII in windowTitle, fail soft. Unblocks /api/telemetry/current AND
+        /api/context/current (VC02) to show REAL data on desktop + phone. Blast radius L1.
+ [TODO] FIX-INSTALLER-DATADIR — packaged app must write data to %APPDATA%\Veridian (not Program
+        Files) so data survives upgrade/uninstall; rebuild installer v1.0.1.
+ [TODO] APK-LAN — rebuild APK with VITE_API_BASE=http://<PC-LAN-IP>:3000 + server 0.0.0.0 (auth)
+        for standalone WiFi data; OR keep USB+adb reverse.
+
+PRODUCT WAVES (priority order — the "real assistant"):
+ [DONE]     MC01 — Phone Home "Focus Now" (telemetry + waiting). Phone screenshot pending device.
+ [BLOCKED] VC02/MC04 (blocked on FIX-TELEMETRY-PARSE; per pipeline review) — Context engine /api/context/current (where-was-I: project, brief, risk,
+            recent, waiting). Built/tested/reviewed; live data blocked by FIX-TELEMETRY-PARSE.
+ [TODO]     VC06/MC02 — One Next Step + Waiting-On-You + blocker explainer.
+ [TODO]     VC07/MC03 — Live agent/run cards + stale detection + evidence ledger view.
+ [TODO]     VC03/MC05 — Explainable AI chat (shows the safe context it used).
+ [TODO]     VC04/MC06 — Notifications + natural voice + mute/verbosity/quiet-hours.
+ [TODO]     VC05 — HUD transparency + restore handle + focus behavior.
+ [TODO]     VC10 — Practical Home dashboard rebuild (replace legacy unknown-value HUD).
+ [TODO]     VC08 — Developer Lab: move simulator/clipboard/ApkCompanion fake chrome out of main UI.
+ [TODO]     VC09/MC08 — Tailscale/device/service-health truth surface.
+ [TODO]     VC07-git — Project/Git/branch/worktree/risk/recovery surface (MC07).
+ [TODO]     MC11 — Android command-center parity ; MC13 ADB evidence harness ; MC14 e2e acceptance.
+
+PLATFORM / OPS:
+ [DONE]     Desktop installer v1.0.0 (versioned, auto-removes old). Not install-tested.
+ [SCAFFOLD] Native Android control client A01-A05 (not buildable).
+ [TODO]     iOS client ; Linux client ; PWA polish.
+ [TODO]     Cloud deploy to pr.afaq24.store (code-ready, not deployed); release gates.
+ [TODO]     Secrets: approved .env -> vault import preview ; rotation reminders ; leak scanner UI.
+
+GOVERNANCE (done):
+ [DONE] Model gateway (north-mini-code:free, route-verified) + 2 skills + safe-stage guard.
+ [DONE] V00 Policy Sentinel real Task Scheduler watchdog (every 10 min, read-only).
+ [DONE] Purpose ledger, intent manifest, journey map, evidence ledger.
+
+KNOWN BUGS TO CLEAR:
+ [BLOCKED-UPSTREAM] Telemetry collector parse (see FIX-TELEMETRY-PARSE) — top priority.
+ [TODO] Remove/relabel ApkCompanion.tsx simulated chrome. Remove dead loadScenario() code.
+ [TODO] Control Center UI browser verification.
+================================================================================

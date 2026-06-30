@@ -1,0 +1,22 @@
+================================================================================
+ VERIDIAN — PIPELINE ASSESSMENT (by cohere/north-mini-code-20260617:free)
+================================================================================
+
+**Is the project on a sound path?**  
+Overall the codebase is mature – logins, security gates, cross‑device clipboard, orchestrator registries, model gateway and installer are all built, reviewed and “truthfully labeled.”  However the core data pipelines that feed the new “assistant” features are still broken, and several critical infrastructure items (installer data layout, cloud deployment, Wi‑Fi APK communication) remain unresolved.  The project is technically solid but functionally stalled on the very data that makes the assistant usable.
+
+**Single most important next step**  
+**Fix the telemetry collector parse bug (FIX‑TELEMETRY‑PARSE).**  It unblocks `/api/telemetry/current` and `/api/context/current`, which are the lifeline for the VC02 context engine (the first assistant feature).  Without real‑time screen/app state the whole “where‑was‑I” capability stays dead, blocking the product‑wave deliverables for the entire assistant layer.  The fix is low‑risk (string‑sanitisation, BOM stripping, graceful error handling) and directly clears the highest‑priority block listed in the TODO board.
+
+**Top 3 risks**  
+1. **Telemetry parse bug** – Keeps live context and telemetry dead, kills the primary user value proposition.  
+2. **Installer data‑dir issue** – Writes user data to `Program Files`, causing loss on upgrade/uninstall and eroding trust.  
+3. **Cloud not deployed** – Code‑ready service (`pr.afaq24.store`) never reaches production, delaying team collaboration and exposing downstream services.
+
+**Mis‑labels / over‑claims / contradictions**  
+- `/api/context/current` is marked “LOCAL TESTED + RUNTIME VERIFIED (error path)”.  It’s only verified because it returns a *negative* error; calling it “runtime verified” is misleading when it cannot deliver real data.  
+- “Desktop installer v1.0.0” is described as built and versioned, yet it is unsigned (SmartScreen warning) and data‑dir handling is broken – the product isn’t truly ready.  
+- “VC02/MC04 – Context engine” is listed as **IN‑FLIGHT**, but it’s effectively **BLOCKED** by the telemetry bug.  The status should reflect the blockage explicitly.  
+
+**One thing being done well**  
+The **model gateway** (scripts/ai/openrouter_bigllm_bundle.py) is robustly engineered: route‑verified (`--verify‑route ROUTE_OK`), pre‑flight checked (`--preflight PASS`), independently reviewed, and it enforces a strict “plan‑gate/review, apply‑only, assess‑only” governance model.  It consistently returns deterministic responses and blocks unsupported fall‑backs, making it the most reliable component of the stack.

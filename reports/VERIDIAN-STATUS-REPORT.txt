@@ -1,0 +1,64 @@
+================================================================================
+ VERIDIAN — STATUS REPORT  (2026-06-30)
+================================================================================
+Branch: fix/veridian-pretest-release-gates (integration; NOT main). Owner: afaqsubs@gmail.com.
+Surfaces: Windows desktop app + read-only cloud dashboard (not deployed) + Android companion.
+
+--------------------------------------------------------------------------------
+A. WHAT IS REAL & TESTED (truthful labels)
+--------------------------------------------------------------------------------
+- Strong login: passphrase + TOTP 2FA, DPAPI-sealed vault. LOCAL TESTED (25 checks).
+- Cloud auth: Google OR TOTP; admin/team allowlist; owner permanent admin. LOCAL TESTED (13+21).
+- Security gates: F-002 fail-closed auth, F-012 AI-Ask scrubber, F-003/029 secrets-at-rest,
+  F-004 sync allowlist, F-013/14/15 atomic writes. LOCAL TESTED + INDEPENDENTLY REVIEWED.
+- Cross-device clipboard: E2E encrypted (central stores ciphertext only). LOCAL TESTED (17).
+- Telemetry: real Windows collectors (active window/app, git, clipboard, desktop, browser).
+- Orchestrator: feature flags, repo registry + risk, settings, locks, dep-graph, secret-ref
+  registry, branch/worktree registry, device registry, tailscale collector. LOCAL TESTED;
+  health/flags/authz RUNTIME VERIFIED; D07+D11 INDEPENDENTLY REVIEWED.
+- Model gateway: scripts/ai/openrouter_bigllm_bundle.py — primary cohere/north-mini-code:free
+  (snapshot cohere/north-mini-code-20260617:free). --verify-route ROUTE_OK; --preflight PASS;
+  Qwen/fallback/unknown/missing BLOCKED; mock tests 10/10. DeepSeek gateway preserved.
+- Desktop installer: release/Veridian-Setup-1.0.0.exe (NSIS, per-machine, shortcuts, auto-
+  removes old version on upgrade). BUILT (not install-tested; unsigned -> SmartScreen).
+- Android APK (com.veridian.app): builds/installs/launches on a real phone. PHONE RUNTIME
+  VERIFIED (boot + first screen) on A059/Android 16.
+- V00 Policy Sentinel: REAL Windows Task Scheduler watchdog (every 10 min, read-only;
+  no model/edit/commit). Registered, Status Ready. First run caught+fixed a false positive.
+
+--------------------------------------------------------------------------------
+B. LATEST WAVE — VC02 CONTEXT ENGINE (this is the first "assistant" feature)
+--------------------------------------------------------------------------------
+- Authored by cohere/north-mini-code:free via the gateway (evidence recorded, hash f5ed09fb...).
+- Opus gate APPROVED WITH REQUIRED PATCH (caught a fabricated FocusNow skeleton; not applied).
+- Sonnet applied minimal diff to the REAL file. NEW lib/context-engine.ts + /api/context/current.
+- tsc clean; unit tests 10/10; INDEPENDENTLY REVIEWED = APPROVE.
+- RUNTIME: /api/context/current returns honest "context unavailable" (negative path verified).
+  Positive data BLOCKED by a PRE-EXISTING telemetry collector JSON-parse bug.
+- Label: LOCAL TESTED + RUNTIME VERIFIED (error path) + INDEPENDENTLY REVIEWED. Committed+pushed.
+
+--------------------------------------------------------------------------------
+C. KNOWN ISSUES (current, truthful)
+--------------------------------------------------------------------------------
+1. PRE-EXISTING telemetry collector parse bug: /api/telemetry/current AND /api/context/current
+   return errors because collectTelemetry's JSON.parse(stdout) chokes on the PowerShell output
+   (windowTitle non-ASCII / stray output). Blocks live "where-was-I" data on screen.
+2. Assistant layer largely NOT BUILT: legacy "Workspace Memory" HUD shows unknown/empty values.
+3. UNMARKED SIMULATED phone chrome in src/components/ApkCompanion.tsx (hardcoded time/battery/
+   alerts/"45 min late") -> misleading; should move to Developer Lab or remove.
+4. Native Android control client (A01-A05) is SCAFFOLD ONLY (not a buildable app).
+5. APK points at http://localhost:3000 -> needs adb reverse (USB) or a LAN rebuild for WiFi data.
+6. Desktop installer not install-tested; data is written to the install dir (Program Files) in
+   the packaged app -> should target %APPDATA%\Veridian so data survives upgrades (FIX PENDING).
+7. Control Center UI: APIs runtime-verified; React screen not browser-verified.
+8. Cloud (pr.afaq24.store) is CODE-READY but NOT DEPLOYED.
+9. AI provider likely unconfigured locally (no ANTHROPIC_BASE_URL) -> desktop-brief TEXT disabled.
+
+--------------------------------------------------------------------------------
+D. PIPELINE / GOVERNANCE
+--------------------------------------------------------------------------------
+Opus = plan/gates/review; DeepSeek/north-mini-code via gateway = sole code author; Sonnet/Haiku
+= apply-only; Anthropic-HTTP = assess-only. Safe-stage guard (no git add -A). Truthful labels.
+Docs: docs/program-control/{MODEL_EXECUTION_POLICY, FEATURE_GATE_POLICY, WORK_PACKAGE_BOARD,
+CODE_PURPOSE_LEDGER, EVIDENCE_LEDGER, HANDOFF_MEMORY, policy-sentinel/V00}; docs/product/{INTENT_MANIFEST, JOURNEY_MAP}.
+================================================================================
