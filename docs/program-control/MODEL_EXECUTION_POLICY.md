@@ -1,5 +1,18 @@
 # MODEL EXECUTION POLICY (mandatory)
 
+> ## ⛔ UPDATE 2026-06-30 — SUPERSEDES the DeepSeek primary below
+> - **Primary Big-LLM code author = `cohere/north-mini-code:free`** (OpenRouter), via the
+>   config-driven gateway **`scripts/ai/openrouter_bigllm_bundle.py`** (env `VERIDIAN_BIG_CODE_MODEL`,
+>   allowlist `VERIDIAN_BIG_CODE_ALLOWLIST`). The old `openrouter_deepseek_bundle.py` is PRESERVED
+>   (backward-compat) but is no longer the primary route.
+> - **Verified live 2026-06-30:** `--verify-route` ROUTE_OK; `--preflight` PASS (native json). The
+>   alias resolves to the **documented immutable snapshot `cohere/north-mini-code-20260617:free`**
+>   (set `VERIDIAN_BIG_CODE_SNAPSHOT` to that; the gateway BLOCKS any other returned model).
+> - **Writer = Claude Sonnet OR Haiku** (apply-only; minimal integration diff; never invents logic).
+> - **V00 Policy Sentinel** active (docs/program-control/policy-sentinel/). No fallback, no Qwen,
+>   no substitution → `MODEL ROUTE BLOCKED`. Commands: `--verify-route`, `--preflight`,
+>   `--package-id <ID> --definition-pack <PATH>`. Tests: `scripts/ai/test_bigllm_gateway.py`.
+
 Every feature, repair, redesign, or Android package follows this routing. No exceptions
 without explicit owner authorization recorded in DECISIONS.md.
 
