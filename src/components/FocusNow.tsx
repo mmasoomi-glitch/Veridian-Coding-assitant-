@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Home, GitBranch, Bell, AlertTriangle } from 'lucide-react';
 import { summarizeFocus, type FocusSummary, type CurrentState } from './focus-summary';
+import type { ContextSnapshot } from "../../lib/context-engine";
 
 interface WaitingItem {
   title?: string;
@@ -16,6 +17,9 @@ export default function FocusNow({ apiBase }: { apiBase: string }) {
   const [telemetry, setTelemetry] = useState<FocusSummary | 'error' | null>(null);
   const [waitingItems, setWaitingItems] = useState<WaitingItem[] | 'error' | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const [ctx, setCtx] = useState<ContextSnapshot | "error" | null>(null);
+  const prevCtxRef = useRef<string>("");
 
   // Ref to prevent flicker: only update state when serialised value changes
   const prevTelemetryRef = useRef<string>('');
@@ -86,6 +90,28 @@ export default function FocusNow({ apiBase }: { apiBase: string }) {
       clearInterval(interval);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiBase]);
+
+  useEffect(() => {
+    const fetchCtx = async () => {
+      try {
+        const res = await fetch(`${baseUrl}/api/context/current`, {
+          credentials: "include",
+        });
+        if (!res.ok) throw new Error("non-ok");
+        const data = await res.json();
+        const jsonString = JSON.stringify(data);
+        if (jsonString !== prevCtxRef.current) {
+          setCtx(data);
+          prevCtxRef.current = jsonString;
+        }
+      } catch {
+        setCtx("error");
+      }
+    };
+    fetchCtx();
+    const intervalId = setInterval(fetchCtx, 10000);
+    return () => clearInterval(intervalId);
   }, [apiBase]);
 
   // ----------------------------------------------------------------
@@ -258,6 +284,37 @@ export default function FocusNow({ apiBase }: { apiBase: string }) {
   // ----------------------------------------------------------------
   return (
     <div className="p-4">
+      {/* --------- VC02 CONTEXT BLOCK (above the focus card) --------- */}
+      {ctx === "error" && (
+        <div className="mb-2 font-mono text-xs text-slate-500">context unavailable</div>
+      )}
+      {ctx && ctx !== "error" && (
+        <div className="mb-3 space-y-1 rounded-md border border-slate-700 bg-slate-800 p-3">
+          {ctx.brief ? (
+            <div className="font-mono text-xs text-slate-300">
+              You were: {ctx.brief.wasDoing} · Next: {ctx.brief.nextStep}
+            </div>
+          ) : (
+            <div className="font-mono text-xs text-slate-500">no saved brief for this desktop</div>
+          )}
+          {ctx.topRisk && (
+            <div className={`inline-block rounded px-2 py-0.5 font-mono text-xs font-medium ${
+              ctx.topRisk.risk === "CRITICAL" ? "bg-rose-900/60 text-rose-300" :
+              ctx.topRisk.risk === "HIGH" ? "bg-orange-900/60 text-orange-300" :
+              ctx.topRisk.risk === "MEDIUM" ? "bg-amber-900/60 text-amber-300" :
+              "bg-slate-700 text-slate-300"
+            }`}>
+              {ctx.topRisk.name}@{ctx.topRisk.branch} — {ctx.topRisk.risk}
+            </div>
+          )}
+          {ctx.recentEvents.length > 0 && (
+            <div className="font-mono text-xs text-slate-500">
+              recent: {ctx.recentEvents.map(e => e.title).join(" · ")}
+            </div>
+          )}
+        </div>
+      )}
+      {/* ------------------------------------------------------------ */}
       <AnimatePresence>
         {renderFocusNow()}
         {renderWaiting()}

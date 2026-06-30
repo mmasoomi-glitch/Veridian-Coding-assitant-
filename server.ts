@@ -41,6 +41,7 @@ import * as todos from "./autopilot/todo-store";
 import { assess as assessBurnout } from "./autopilot/burnout-store";
 import * as keylog from "./autopilot/keylog-store";
 import { writeJsonAtomic } from "./lib/atomic";
+import { buildContextSnapshot } from "./lib/context-engine";
 import os from "os";
 
 dotenv.config();
@@ -437,6 +438,19 @@ app.get("/api/telemetry/current", async (req, res) => {
     console.error("Telemetry collection failed:", error);
     res.status(500).json({ error: "Telemetry collection failed.", details: error?.message || String(error) });
   }
+});
+
+app.get("/api/context/current", async (req, res) => {
+  try {
+    const shaped = shapeTelemetry(await collectTelemetry());
+    const cs = shaped.currentState;
+    const deskKey = String(cs?.virtualDesktop || "").trim();
+    const brief = deskKey ? (getBrief(deskKey) || getBrief(deskKey.split("(")[0].trim())) : null;
+    const waiting = await getWaitingItems().catch(() => []);
+    let repos: any[] = [];
+    try { repos = scanReposSafe(); } catch { repos = []; }
+    res.json(buildContextSnapshot({ currentState: cs, timeline: shaped.timeline, brief, waiting, repos }));
+  } catch (e: any) { res.status(500).json({ error: "context unavailable" }); }
 });
 
 // Background poller: capture real telemetry on an interval so the live session

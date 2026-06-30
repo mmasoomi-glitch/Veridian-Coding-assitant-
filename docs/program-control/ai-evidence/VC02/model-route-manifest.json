@@ -1,0 +1,16 @@
+{
+  "package_id": "VC02",
+  "provider": "openrouter",
+  "configured_model": "cohere/north-mini-code:free",
+  "returned_model": "cohere/north-mini-code-20260617:free",
+  "allowlist": [
+    "cohere/north-mini-code:free"
+  ],
+  "ts": "2026-06-30T03:18:09Z",
+  "redaction": "request scanned, no secret transmitted",
+  "response_sha256": "f5ed09fb0442a6361d094f874c781a7e686a8521a394fe3abe0217714f04e1a9",
+  "bundle_problems": [
+    "contains TODO/pseudo-code/ellipsis stub"
+  ],
+  "raw_artifact": ".ai-private/VC02-bigllm-raw.md"
+}

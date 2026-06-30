@@ -85,3 +85,5 @@ docs/program-control/ai-evidence/**/*-deepseek-raw.md
 __pycache__/
 .prod-modules/
 release/
+docs/program-control/policy-sentinel/sentinel.log
+docs/program-control/policy-sentinel/last-run.json
